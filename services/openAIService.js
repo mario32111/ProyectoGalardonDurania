@@ -44,58 +44,55 @@ class OpenAIService {
         }
     }
 
-    /**
-     * Versión modificada para Texto Plano (No Streaming)
-     */
-    async completion(callSid, userMessageContent, emotionContent, ws) {
-        console.log(`[IA Service] Iniciando respuesta plana. CallSid: ${callSid}`);
+    async completion(callSid, userMessageContent, ws) {
+        console.log(`[IA Service] Iniciando streaming. CallSid: ${callSid}`);
 
         const history = this.getSessionHistory(callSid);
         history.push({ role: 'user', content: userMessageContent });
-        history.push({ role: 'user', content: `Emoción detectada: ${emotionContent}` });
+
+        let aiResponseContent = "";
 
         try {
-            // Llamada única a la API (sin stream: true)
-            const response = await this.client.chat.completions.create({
+            const stream = await this.client.chat.completions.create({
                 messages: history,
-                max_tokens: 2000, // Ajustado para respuestas JSON
-                temperature: 0.3,  // Menor temperatura = mayor adherencia al JSON
+                max_tokens: 2000,
+                temperature: 0.3,
                 model: process.env.AZURE_OPENAI_DEPLOYMENT_NAME,
-                stream: false 
+                stream: true // <--- ACTIVAMOS EL STREAMING
             });
 
-            const aiResponseContent = response.choices[0]?.message?.content || "";
+            for await (const chunk of stream) {
+                const content = chunk.choices[0]?.delta?.content || "";
+                if (content) {
+                    aiResponseContent += content;
 
-            // 1. Guardar en historial
-            if (aiResponseContent) {
-                history.push({ role: 'assistant', content: aiResponseContent });
+                    // Enviamos cada pedacito al cliente inmediatamente
+                    const payload = {
+                        event: 'ai_chunk',
+                        chunk: content
+                    };
+
+                    if (ws.emit) {
+                        ws.emit('ai_chunk', payload);
+                    } else if (ws.send) {
+                        ws.send(JSON.stringify(payload));
+                    }
+                }
             }
 
-            // 2. Enviar respuesta completa de una sola vez
-            const payload = {
-                event: 'ai_response',
-                fullResponse: aiResponseContent,
-                historyCount: history.length
-            };
+            // Al terminar el stream, guardamos la respuesta completa en el historial
+            history.push({ role: 'assistant', content: aiResponseContent });
 
-            if (ws.emit) {
-                ws.emit('ai_response', payload);
-            } else if (ws.send) {
-                ws.send(JSON.stringify(payload));
-            }
+            // Notificamos que el stream terminó
+            const endPayload = { event: 'ai_end' };
+            if (ws.emit) ws.emit('ai_end', endPayload);
+            else if (ws.send) ws.send(JSON.stringify(endPayload));
 
-            console.log(`[IA Service] Respuesta enviada con éxito.`);
+            console.log(`[IA Service] Stream finalizado con éxito.`);
 
         } catch (error) {
-            console.error('❌ Error en Azure OpenAI (Plano):', error);
-            const errorMsg = {
-                event: 'remote_error',
-                message: 'Error al procesar la solicitud',
-                details: error.message
-            };
-            
-            if (ws.emit) ws.emit('remote_error', errorMsg);
-            else if (ws.send) ws.send(JSON.stringify(errorMsg));
+            console.error('❌ Error en streaming:', error);
+            // Manejo de errores omitido por brevedad...
         }
     }
 }
