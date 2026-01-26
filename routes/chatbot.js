@@ -1,39 +1,35 @@
 var express = require('express');
 var router = express.Router();
-
+var wss = require('../ws/stream');
 /**
  * Rutas para Chatbot
  * Gestión de interacciones con el chatbot de la plataforma ganadera
  */
 
-// POST /chatbot/mensaje - Enviar un mensaje al chatbot
-router.post('/mensaje', function(req, res, next) {
+// POST /chatbot/message - Enviar un mensaje al chatbot
+router.post('/message', async function (req, res, next) {
   try {
-    const { mensaje, usuario_id, sesion_id } = req.body;
-    // TODO: Implementar lógica de procesamiento del mensaje
-    // Integrar con servicio de IA/NLP (OpenAI, Dialogflow, etc.)
-    
-    res.status(200).json({
-      success: true,
-      message: 'Mensaje procesado',
-      data: {
-        respuesta: 'Esta es una respuesta de ejemplo del chatbot',
-        sesion_id: sesion_id || 'nueva_sesion_id',
-        timestamp: new Date()
-      }
-    });
+    const { message, session_id } = req.body;
+    console.log('Mensaje recibido:', message);
+    console.log('Sesión ID:', session_id);
+
+    const openAIService = require('../services/openAIService');
+
+    // Llamamos al servicio pasando el adaptador
+    await openAIService.completion(session_id, message, wss);
+
   } catch (error) {
     next(error);
   }
 });
 
 // GET /chatbot/historial/:usuario_id - Obtener historial de conversaciones
-router.get('/historial/:usuario_id', function(req, res, next) {
+router.get('/historial/:usuario_id', function (req, res, next) {
   try {
     const { usuario_id } = req.params;
     const { limite = 50, pagina = 1 } = req.query;
     // TODO: Implementar lógica para obtener historial de conversaciones
-    
+
     res.status(200).json({
       success: true,
       message: 'Historial de conversaciones',
@@ -49,11 +45,11 @@ router.get('/historial/:usuario_id', function(req, res, next) {
 });
 
 // GET /chatbot/sesion/:sesion_id - Obtener mensajes de una sesión específica
-router.get('/sesion/:sesion_id', function(req, res, next) {
+router.get('/sesion/:sesion_id', function (req, res, next) {
   try {
     const { sesion_id } = req.params;
     // TODO: Implementar lógica para obtener mensajes de una sesión
-    
+
     res.status(200).json({
       success: true,
       message: 'Mensajes de la sesión',
@@ -68,11 +64,11 @@ router.get('/sesion/:sesion_id', function(req, res, next) {
 });
 
 // POST /chatbot/sesion/nueva - Iniciar una nueva sesión de chat
-router.post('/sesion/nueva', function(req, res, next) {
+router.post('/sesion/nueva', function (req, res, next) {
   try {
     const { usuario_id } = req.body;
     // TODO: Crear nueva sesión de chat
-    
+
     const nueva_sesion_id = `sesion_${Date.now()}`;
     res.status(201).json({
       success: true,
@@ -89,11 +85,11 @@ router.post('/sesion/nueva', function(req, res, next) {
 });
 
 // DELETE /chatbot/sesion/:sesion_id - Finalizar/eliminar una sesión
-router.delete('/sesion/:sesion_id', function(req, res, next) {
+router.delete('/sesion/:sesion_id', function (req, res, next) {
   try {
     const { sesion_id } = req.params;
     // TODO: Implementar lógica para finalizar sesión
-    
+
     res.status(200).json({
       success: true,
       message: `Sesión ${sesion_id} finalizada`
@@ -104,11 +100,11 @@ router.delete('/sesion/:sesion_id', function(req, res, next) {
 });
 
 // POST /chatbot/feedback - Enviar feedback sobre una respuesta
-router.post('/feedback', function(req, res, next) {
+router.post('/feedback', function (req, res, next) {
   try {
     const { mensaje_id, calificacion, comentario } = req.body;
     // TODO: Guardar feedback para mejorar el chatbot
-    
+
     res.status(200).json({
       success: true,
       message: 'Feedback recibido',
@@ -123,10 +119,10 @@ router.post('/feedback', function(req, res, next) {
 });
 
 // GET /chatbot/sugerencias - Obtener sugerencias de preguntas frecuentes
-router.get('/sugerencias', function(req, res, next) {
+router.get('/sugerencias', function (req, res, next) {
   try {
     // TODO: Implementar lógica para obtener preguntas sugeridas
-    
+
     res.status(200).json({
       success: true,
       message: 'Sugerencias de preguntas',

@@ -1,126 +1,23 @@
 const { createAzureClient } = require('../config/azureConfig.js');
 
 const tools = [
-    // ========== GESTIÓN DE GANADO ==========
-    {
-        type: "function",
-        function: {
-            name: "obtenerGanado",
-            description: "Obtiene la lista completa de ganado registrado o filtra por criterios específicos.",
-            parameters: {
-                type: "object",
-                properties: {
-                    filtros: {
-                        type: "object",
-                        description: "Filtros opcionales para la búsqueda",
-                        properties: {
-                            raza: { type: "string", description: "Raza del ganado (ej: Holstein, Angus)" },
-                            estado_salud: { type: "string", description: "Estado de salud del animal" },
-                            edad_min: { type: "number", description: "Edad mínima en años" },
-                            edad_max: { type: "number", description: "Edad máxima en años" }
-                        }
-                    }
-                },
-                required: []
-            }
-        }
-    },
-    {
-        type: "function",
-        function: {
-            name: "registrarGanado",
-            description: "Registra un nuevo animal en el sistema ganadero.",
-            parameters: {
-                type: "object",
-                properties: {
-                    nombre: { type: "string", description: "Nombre o identificación del animal" },
-                    raza: { type: "string", description: "Raza del ganado" },
-                    edad: { type: "number", description: "Edad del animal en años" },
-                    peso: { type: "number", description: "Peso del animal en kilogramos" },
-                    estado_salud: { type: "string", description: "Estado de salud actual" },
-                    fecha_ingreso: { type: "string", description: "Fecha de ingreso en formato YYYY-MM-DD" }
-                },
-                required: ["nombre", "raza"]
-            }
-        }
-    },
-    {
-        type: "function",
-        function: {
-            name: "consultarGanado",
-            description: "Consulta información detallada de un animal específico por su ID.",
-            parameters: {
-                type: "object",
-                properties: {
-                    ganado_id: { type: "string", description: "ID único del animal a consultar" }
-                },
-                required: ["ganado_id"]
-            }
-        }
-    },
-    {
-        type: "function",
-        function: {
-            name: "actualizarGanado",
-            description: "Actualiza la información de un animal existente (peso, estado de salud, etc.).",
-            parameters: {
-                type: "object",
-                properties: {
-                    ganado_id: { type: "string", description: "ID del animal a actualizar" },
-                    datos: {
-                        type: "object",
-                        description: "Datos a actualizar",
-                        properties: {
-                            peso: { type: "number" },
-                            estado_salud: { type: "string" },
-                            observaciones: { type: "string" }
-                        }
-                    }
-                },
-                required: ["ganado_id", "datos"]
-            }
-        }
-    },
-
-    // ========== GESTIÓN DE TRÁMITES ==========
     {
         type: "function",
         function: {
             name: "obtenerTiposTramites",
-            description: "Obtiene todos los tipos de trámites disponibles y sus etapas (Pruebas de Ganado, Movilización, Exportación).",
-            parameters: {
-                type: "object",
-                properties: {},
-                required: []
-            }
+            description: "Obtiene los requisitos y etapas de los trámites: Pruebas de Ganado, Movilización y Exportación.",
+            parameters: { type: "object", properties: {} }
         }
     },
     {
         type: "function",
         function: {
             name: "consultarTramite",
-            description: "Consulta el estado actual de un trámite específico, incluyendo la etapa en la que se encuentra.",
+            description: "Consulta el estado y etapa actual de un trámite (Movilización, Exportación o Pruebas).",
             parameters: {
                 type: "object",
                 properties: {
-                    tramite_id: {
-                        type: "string",
-                        description: "ID del trámite o número de trámite (ej: TRM-2026-001)"
-                    }
-                },
-                required: ["tramite_id"]
-            }
-        }
-    },
-    {
-        type: "function",
-        function: {
-            name: "obtenerSeguimientoTramite",
-            description: "Obtiene el seguimiento completo de un trámite con historial de todas las etapas por las que ha pasado.",
-            parameters: {
-                type: "object",
-                properties: {
-                    tramite_id: { type: "string", description: "ID del trámite" }
+                    tramite_id: { type: "string", description: "ID del trámite (ej: TRM-2026-001)" }
                 },
                 required: ["tramite_id"]
             }
@@ -130,43 +27,15 @@ const tools = [
         type: "function",
         function: {
             name: "crearTramite",
-            description: "Crea un nuevo trámite (Pruebas de Ganado, Movilización o Exportación).",
+            description: "Inicia un nuevo proceso de Movilización, Exportación o Pruebas Sanitarias.",
             parameters: {
                 type: "object",
                 properties: {
-                    tipo: {
-                        type: "string",
-                        enum: ["PRUEBAS_GANADO", "MOVILIZACION", "EXPORTACION"],
-                        description: "Tipo de trámite a crear"
-                    },
-                    usuario_id: { type: "string", description: "ID del usuario solicitante" },
-                    ganado_ids: {
-                        type: "array",
-                        items: { type: "string" },
-                        description: "IDs de los animales relacionados al trámite"
-                    },
-                    observaciones: { type: "string", description: "Observaciones adicionales" }
+                    tipo: { type: "string", enum: ["PRUEBAS_GANADO", "MOVILIZACION", "EXPORTACION"] },
+                    uppId: { type: "string", description: "Clave UPP de 12 dígitos" },
+                    observaciones: { type: "string" }
                 },
-                required: ["tipo", "usuario_id"]
-            }
-        }
-    },
-    {
-        type: "function",
-        function: {
-            name: "obtenerTramitesUsuario",
-            description: "Obtiene todos los trámites de un usuario específico.",
-            parameters: {
-                type: "object",
-                properties: {
-                    usuario_id: { type: "string", description: "ID del usuario" },
-                    estado: {
-                        type: "string",
-                        enum: ["PENDIENTE", "EN_PROCESO", "COMPLETADO", "CANCELADO"],
-                        description: "Filtrar por estado (opcional)"
-                    }
-                },
-                required: ["usuario_id"]
+                required: ["tipo", "uppId"]
             }
         }
     },
@@ -174,171 +43,13 @@ const tools = [
         type: "function",
         function: {
             name: "consultarEstatusSanitario",
-            description: "Consulta si una UPP tiene sus pruebas de sanidad vigentes.",
+            description: "Verifica si la UPP tiene las pruebas de sanidad vigentes (requisito para movilizar/exportar).",
             parameters: {
                 type: "object",
                 properties: {
-                    uppId: {
-                        type: "string",
-                        description: "La clave de 12 dígitos de la Unidad de Producción Pecuaria."
-                    }
+                    uppId: { type: "string", description: "Clave de 12 dígitos de la UPP" }
                 },
                 required: ["uppId"]
-            }
-        }
-    },
-
-    // ========== GESTIÓN DE INVENTARIO ==========
-    {
-        type: "function",
-        function: {
-            name: "consultarInventario",
-            description: "Consulta el inventario completo o filtra por categoría (alimentos, medicamentos, equipos).",
-            parameters: {
-                type: "object",
-                properties: {
-                    categoria: {
-                        type: "string",
-                        description: "Filtrar por categoría: alimento, medicamento, equipo"
-                    },
-                    stock_bajo: {
-                        type: "boolean",
-                        description: "Mostrar solo items con stock bajo"
-                    }
-                },
-                required: []
-            }
-        }
-    },
-    {
-        type: "function",
-        function: {
-            name: "consultarItemInventario",
-            description: "Consulta información detallada de un item específico del inventario.",
-            parameters: {
-                type: "object",
-                properties: {
-                    item_id: { type: "string", description: "ID del item a consultar" }
-                },
-                required: ["item_id"]
-            }
-        }
-    },
-    {
-        type: "function",
-        function: {
-            name: "agregarItemInventario",
-            description: "Agrega un nuevo item al inventario (alimento, medicamento, equipo, etc.).",
-            parameters: {
-                type: "object",
-                properties: {
-                    nombre: { type: "string", description: "Nombre del item" },
-                    categoria: { type: "string", description: "Categoría del item" },
-                    cantidad: { type: "number", description: "Cantidad disponible" },
-                    unidad_medida: { type: "string", description: "Unidad de medida (kg, litros, unidades)" },
-                    precio_unitario: { type: "number", description: "Precio por unidad" },
-                    proveedor: { type: "string", description: "Nombre del proveedor" }
-                },
-                required: ["nombre", "categoria", "cantidad"]
-            }
-        }
-    },
-    {
-        type: "function",
-        function: {
-            name: "actualizarStockInventario",
-            description: "Actualiza el stock de un item del inventario (agregar o restar cantidad).",
-            parameters: {
-                type: "object",
-                properties: {
-                    item_id: { type: "string", description: "ID del item" },
-                    cantidad: { type: "number", description: "Cantidad a agregar o restar" },
-                    operacion: {
-                        type: "string",
-                        enum: ["agregar", "restar"],
-                        description: "Tipo de operación sobre el stock"
-                    }
-                },
-                required: ["item_id", "cantidad", "operacion"]
-            }
-        }
-    },
-    {
-        type: "function",
-        function: {
-            name: "obtenerAlertasStockBajo",
-            description: "Obtiene lista de items con stock bajo que requieren reabastecimiento.",
-            parameters: {
-                type: "object",
-                properties: {},
-                required: []
-            }
-        }
-    },
-
-    // ========== GESTIÓN DE USUARIOS ==========
-    {
-        type: "function",
-        function: {
-            name: "consultarUsuario",
-            description: "Consulta información de un usuario específico.",
-            parameters: {
-                type: "object",
-                properties: {
-                    usuario_id: { type: "string", description: "ID del usuario a consultar" }
-                },
-                required: ["usuario_id"]
-            }
-        }
-    },
-    {
-        type: "function",
-        function: {
-            name: "registrarUsuario",
-            description: "Registra un nuevo usuario en la plataforma.",
-            parameters: {
-                type: "object",
-                properties: {
-                    nombre: { type: "string", description: "Nombre completo del usuario" },
-                    email: { type: "string", description: "Email del usuario" },
-                    password: { type: "string", description: "Contraseña" },
-                    rol: { type: "string", description: "Rol del usuario (administrador, ganadero, veterinario)" },
-                    telefono: { type: "string", description: "Teléfono de contacto" }
-                },
-                required: ["nombre", "email", "password"]
-            }
-        }
-    },
-
-    // ========== INFORMACIÓN GENERAL ==========
-    {
-        type: "function",
-        function: {
-            name: "obtenerEstadisticasGenerales",
-            description: "Obtiene estadísticas generales de la plataforma (total de ganado, trámites activos, etc.).",
-            parameters: {
-                type: "object",
-                properties: {},
-                required: []
-            }
-        }
-    },
-    {
-        type: "function",
-        function: {
-            name: "buscarInformacion",
-            description: "Búsqueda general en la plataforma (ganado, trámites, inventario) por palabras clave.",
-            parameters: {
-                type: "object",
-                properties: {
-                    termino_busqueda: { type: "string", description: "Término a buscar" },
-                    categoria: {
-                        type: "string",
-                        enum: ["ganado", "tramites", "inventario", "todos"],
-                        description: "Categoría donde buscar"
-                    }
-                },
-                required: ["termino_busqueda"]
             }
         }
     }
@@ -348,110 +59,129 @@ class OpenAIService {
     sessions = new Map();
 
     constructor() {
-        console.log('🔑 Configurando Azure OpenAI (Modo Texto Plano)...');
         this.client = createAzureClient();
     }
 
     getSystemContext() {
         return {
             role: "system",
-            content: `
-## 🐮 Asistente Virtual de Plataforma Ganadera Integral 🐮
-
-Eres un asistente experto en gestión ganadera que ayuda a productores con:
-
-**MÓDULOS DISPONIBLES:**
-1. **GESTIÓN DE GANADO**: Registro, consulta y actualización de animales
-2. **TRÁMITES**: Pruebas Sanitarias, Movilización y Exportación con seguimiento por etapas
-3. **INVENTARIO**: Control de alimentos, medicamentos y equipos
-4. **USUARIOS**: Gestión de perfiles y roles
-
-**TIPOS DE TRÁMITES:**
-- **PRUEBAS_GANADO**: 6 etapas (Solicitud → Programación → Toma de Muestras → Laboratorio → Resultados → Finalizado)
-- **MOVILIZACION**: 6 etapas (Solicitud → Revisión Documental → InspeFcción → Aprobación → Guía Emitida → Finalizado)
-- **EXPORTACION**: 7 etapas (Solicitud → Revisión → Certificaciones → Inspección Aduanal → SENASA → Documentación → Finalizado)
-
-**CAPACIDADES:**
-- Consultar estado de trámites (como seguimiento de pedidos)
-- Registrar y consultar ganado
-- Gestionar inventario con alertas de stock bajo
-- Buscar información en toda la plataforma
-- Proporcionar guía paso a paso para procesos
-
-**INSTRUCCIONES:**
-1. Usa las funciones disponibles para obtener información actualizada
-2. Proporciona respuestas claras y específicas
-3. Para trámites, siempre indica el estado actual y próximos pasos
-4. Sugiere acciones preventivas (ej: alertas de stock, renovación de pruebas)
-5. Sé proactivo en ofrecer ayuda relacionada
-
-**TONO:** Profesional, amigable y orientado a soluciones.`
+            content: `## 🐮 Experto en Trámites Ganaderos - UPP & PGN 🐮
+            OBJETIVO: Eres un asistente especializado ÚNICAMENTE en la gestión de trámites (Pruebas, Movilización, Exportación). 
+            Siempre solicita la Clave UPP de 12 dígitos. Prioriza la Digitalización para reducir archivos físicos.`
         };
     }
 
-    getSessionHistory(callSid) {
-        if (!this.sessions.has(callSid)) {
-            this.sessions.set(callSid, [this.getSystemContext()]);
+    getSessionHistory(sesion_id) {
+        if (!this.sessions.has(sesion_id)) {
+            this.sessions.set(sesion_id, [this.getSystemContext()]);
         }
-        return this.sessions.get(callSid);
+        return this.sessions.get(sesion_id);
     }
 
-    resetHistory(callSid) {
-        if (this.sessions.has(callSid)) {
-            this.sessions.delete(callSid);
+    async completion(sesion_id, userMessageContent, ws) {
+        const history = this.getSessionHistory(sesion_id);
+        
+        // Evitamos duplicar el mensaje si es una re-entrada por función
+        if (userMessageContent !== "_FUNCTION_RESULT_") {
+            history.push({ role: 'user', content: userMessageContent });
         }
-    }
-
-    async completion(callSid, userMessageContent, ws) {
-        console.log(`[IA Service] Iniciando streaming. CallSid: ${callSid}`);
-
-        const history = this.getSessionHistory(callSid);
-        history.push({ role: 'user', content: userMessageContent });
 
         let aiResponseContent = "";
+        let tempToolCalls = [];
 
         try {
             const stream = await this.client.chat.completions.create({
                 messages: history,
-                max_tokens: 2000,
-                temperature: 0.3,
+                max_tokens: 1500,
+                temperature: 0.2,
                 model: process.env.AZURE_OPENAI_DEPLOYMENT_NAME,
                 tools: tools,
-                stream: true // <--- ACTIVAMOS EL STREAMING
+                stream: true
             });
 
             for await (const chunk of stream) {
-                const content = chunk.choices[0]?.delta?.content || "";
-                if (content) {
+                const delta = chunk.choices[0]?.delta;
+
+                // 1. Manejo de Texto
+                if (delta?.content) {
+                    const content = delta.content;
                     aiResponseContent += content;
+                    // Log enviado a través del socket destinado
+                    this.emitEvent(ws, 'ai_chunk', { chunk: content });
+                }
 
-                    // Enviamos cada pedacito al cliente inmediatamente
-                    const payload = {
-                        event: 'ai_chunk',
-                        chunk: content
-                    };
-
-                    if (ws.emit) {
-                        ws.emit('ai_chunk', payload);
-                    } else if (ws.send) {
-                        ws.send(JSON.stringify(payload));
+                // 2. Manejo de Herramientas (Acumulación)
+                if (delta?.tool_calls) {
+                    for (const toolCallDelta of delta.tool_calls) {
+                        const index = toolCallDelta.index;
+                        if (!tempToolCalls[index]) {
+                            tempToolCalls[index] = {
+                                id: toolCallDelta.id,
+                                type: "function",
+                                function: { name: "", arguments: "" }
+                            };
+                        }
+                        if (toolCallDelta.function?.name) tempToolCalls[index].function.name += toolCallDelta.function.name;
+                        if (toolCallDelta.function?.arguments) tempToolCalls[index].function.arguments += toolCallDelta.function.arguments;
                     }
                 }
             }
 
-            // Al terminar el stream, guardamos la respuesta completa en el historial
-            history.push({ role: 'assistant', content: aiResponseContent });
+            // Guardar respuesta de texto si existe
+            if (aiResponseContent) {
+                history.push({ role: 'assistant', content: aiResponseContent });
+                this.emitEvent(ws, 'ai_end', { fullResponse: aiResponseContent });
+            }
 
-            // Notificamos que el stream terminó
-            const endPayload = { event: 'ai_end' };
-            if (ws.emit) ws.emit('ai_end', endPayload);
-            else if (ws.send) ws.send(JSON.stringify(endPayload));
+            // 3. Ejecución de Funciones
+            if (tempToolCalls.length > 0) {
+                history.push({ role: "assistant", tool_calls: tempToolCalls });
 
-            console.log(`[IA Service] Stream finalizado con éxito.`);
+                for (const tool of tempToolCalls) {
+                    const functionName = tool.function.name;
+                    const args = JSON.parse(tool.function.arguments);
+
+                    // LOG DE FUNCIÓN: Enviado al evento destinado
+                    this.emitEvent(ws, 'ai_log', { message: `Ejecutando lógica: ${functionName}`, params: args });
+
+                    const result = await this.handleFunctionCall(functionName, args);
+
+                    history.push({
+                        role: "tool",
+                        tool_call_id: tool.id,
+                        name: functionName,
+                        content: JSON.stringify(result)
+                    });
+                }
+
+                // Segunda vuelta para que la IA responda con los datos obtenidos
+                return this.completion(sesion_id, "_FUNCTION_RESULT_", ws);
+            }
 
         } catch (error) {
-            console.error('❌ Error en streaming:', error);
-            // Manejo de errores omitido por brevedad...
+            this.emitEvent(ws, 'remote_error', { details: error.message });
+        }
+    }
+
+    async handleFunctionCall(name, args) {
+        // Aquí conectas con tu Base de Datos real
+        switch (name) {
+            case "consultarEstatusSanitario":
+                return { upp: args.uppId, estatus: "ACTIVO", vigencia: "2026-12-31", pgn_cumplido: true };
+            case "consultarTramite":
+                return { id: args.tramite_id, etapa: "Inspección", porcentaje: "65%" };
+            default:
+                return { info: "Función ejecutada con éxito" };
+        }
+    }
+
+    emitEvent(ws, event, data) {
+        const payload = JSON.stringify({ event, ...data });
+        // Priorizamos ws.send para asegurar que el cliente de socket reciba el JSON plano
+        if (ws.send) {
+            ws.send(payload);
+        } else if (ws.emit) {
+            ws.emit(event, data);
         }
     }
 }
