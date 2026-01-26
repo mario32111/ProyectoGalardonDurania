@@ -10,6 +10,7 @@ var ganadoRouter = require('./routes/ganado');
 var usuariosRouter = require('./routes/usuarios');
 var inventarioRouter = require('./routes/inventario');
 var chatbotRouter = require('./routes/chatbot');
+var tramitesRouter = require('./routes/tramites');
 
 var app = express();
 
@@ -29,6 +30,7 @@ app.use('/ganado', ganadoRouter);
 app.use('/usuarios', usuariosRouter);
 app.use('/inventario', inventarioRouter);
 app.use('/chatbot', chatbotRouter);
+app.use('/tramites', tramitesRouter);
 
 // catch 404 and forward to error handler
 app.use(function(req, res, next) {
