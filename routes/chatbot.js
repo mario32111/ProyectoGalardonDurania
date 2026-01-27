@@ -1,6 +1,6 @@
 var express = require('express');
 var router = express.Router();
-const { db } = require('../config/firebaseConfig');
+const chatbotService = require('../services/chatbotService');
 var wss = require('../ws/stream');
 /**
  * Rutas para Chatbot
@@ -27,17 +27,10 @@ router.post('/message', async function (req, res, next) {
 // GET /chatbot/historial/:usuario_id - Obtener historial de conversaciones
 router.get('/historial/:usuario_id', async function (req, res, next) {
   try {
-
     const { usuario_id } = req.params;
     const { limite = 50 } = req.query;
 
-    const snapshot = await db.collection('sesiones')
-      .where('usuario_id', '==', usuario_id)
-      .orderBy('fecha_inicio', 'desc')
-      .limit(Number(limite))
-      .get();
-
-    const conversaciones = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const conversaciones = await chatbotService.getHistorial(usuario_id, limite);
 
     res.status(200).json({
       success: true,
@@ -55,23 +48,12 @@ router.get('/historial/:usuario_id', async function (req, res, next) {
 // GET /chatbot/sesion/:sesion_id - Obtener mensajes de una sesión específica
 router.get('/sesion/:sesion_id', async function (req, res, next) {
   try {
-
     const { sesion_id } = req.params;
+    const data = await chatbotService.getSesion(sesion_id);
 
-    const doc = await db.collection('sesiones').doc(sesion_id).get();
+    if (!data) return res.status(404).json({ success: false, message: 'Sesión no encontrada' });
 
-    if (!doc.exists) {
-      return res.status(404).json({ success: false, message: 'Sesión no encontrada' });
-    }
-
-    res.status(200).json({
-      success: true,
-      message: 'Mensajes de la sesión',
-      data: {
-        sesion_id: doc.id,
-        ...doc.data()
-      }
-    });
+    res.status(200).json({ success: true, message: 'Mensajes de la sesión', data });
   } catch (error) {
     next(error);
   }
@@ -80,25 +62,10 @@ router.get('/sesion/:sesion_id', async function (req, res, next) {
 // POST /chatbot/sesion/nueva - Iniciar una nueva sesión de chat
 router.post('/sesion/nueva', async function (req, res, next) {
   try {
-
     const { usuario_id } = req.body;
+    const data = await chatbotService.createSesion(usuario_id);
 
-    const nuevaSesion = {
-      usuario_id,
-      fecha_inicio: new Date().toISOString(),
-      mensajes: []
-    };
-
-    const docRef = await db.collection('sesiones').add(nuevaSesion);
-
-    res.status(201).json({
-      success: true,
-      message: 'Nueva sesión creada',
-      data: {
-        sesion_id: docRef.id,
-        ...nuevaSesion
-      }
-    });
+    res.status(201).json({ success: true, message: 'Nueva sesión creada', data });
   } catch (error) {
     next(error);
   }
@@ -107,10 +74,8 @@ router.post('/sesion/nueva', async function (req, res, next) {
 // DELETE /chatbot/sesion/:sesion_id - Finalizar/eliminar una sesión
 router.delete('/sesion/:sesion_id', async function (req, res, next) {
   try {
-
     const { sesion_id } = req.params;
-
-    await db.collection('sesiones').doc(sesion_id).delete();
+    await chatbotService.deleteSesion(sesion_id);
 
     res.status(200).json({
       success: true,
@@ -124,24 +89,8 @@ router.delete('/sesion/:sesion_id', async function (req, res, next) {
 // POST /chatbot/feedback - Enviar feedback sobre una respuesta
 router.post('/feedback', async function (req, res, next) {
   try {
-
-    const { session_id, mensaje_id, calificacion, comentario } = req.body;
-
-    const feedbackData = {
-      session_id,
-      mensaje_id,
-      calificacion,
-      comentario,
-      fecha: new Date().toISOString()
-    };
-
-    await db.collection('feedback_chatbot').add(feedbackData);
-
-    res.status(200).json({
-      success: true,
-      message: 'Feedback recibido',
-      data: feedbackData
-    });
+    const data = await chatbotService.saveFeedback(req.body);
+    res.status(200).json({ success: true, message: 'Feedback recibido', data });
   } catch (error) {
     next(error);
   }
