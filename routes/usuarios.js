@@ -1,5 +1,6 @@
 var express = require('express');
 var router = express.Router();
+const { db } = require('../config/firebaseConfig');
 
 /**
  * CRUD para Usuarios
@@ -9,7 +10,7 @@ var router = express.Router();
 // GET /usuarios - Obtener todos los usuarios
 router.get('/', async function (req, res, next) {
   try {
-    const { db } = require('../config/firebaseConfig');
+
     const snapshot = await db.collection('usuarios').get();
     const usuarios = snapshot.docs.map(doc => {
       const data = doc.data();
@@ -30,7 +31,7 @@ router.get('/', async function (req, res, next) {
 // GET /usuarios/:id - Obtener un usuario específico
 router.get('/:id', async function (req, res, next) {
   try {
-    const { db } = require('../config/firebaseConfig');
+
     const { id } = req.params;
     const doc = await db.collection('usuarios').doc(id).get();
 
@@ -54,7 +55,7 @@ router.get('/:id', async function (req, res, next) {
 // POST /usuarios - Crear un nuevo usuario
 router.post('/', async function (req, res, next) {
   try {
-    const { db } = require('../config/firebaseConfig');
+
     const data = req.body;
 
     // Check if email already exists
@@ -86,7 +87,7 @@ router.post('/', async function (req, res, next) {
 // PUT /usuarios/:id - Actualizar un usuario
 router.put('/:id', async function (req, res, next) {
   try {
-    const { db } = require('../config/firebaseConfig');
+
     const { id } = req.params;
     const data = req.body;
 
@@ -108,7 +109,7 @@ router.put('/:id', async function (req, res, next) {
 // DELETE /usuarios/:id - Eliminar un usuario
 router.delete('/:id', async function (req, res, next) {
   try {
-    const { db } = require('../config/firebaseConfig');
+
     const { id } = req.params;
 
     await db.collection('usuarios').doc(id).delete();

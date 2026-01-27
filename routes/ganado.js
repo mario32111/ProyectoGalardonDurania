@@ -1,5 +1,6 @@
 var express = require('express');
 var router = express.Router();
+const { db } = require('../config/firebaseConfig');
 
 /**
  * CRUD para Ganado
@@ -9,7 +10,7 @@ var router = express.Router();
 // GET /ganado - Obtener todos los registros de ganado
 router.get('/', async function (req, res, next) {
   try {
-    const { db } = require('../config/firebaseConfig');
+
     const snapshot = await db.collection('ganado').get();
     const ganado = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
@@ -26,7 +27,7 @@ router.get('/', async function (req, res, next) {
 // GET /ganado/:id - Obtener un registro específico de ganado
 router.get('/:id', async function (req, res, next) {
   try {
-    const { db } = require('../config/firebaseConfig');
+
     const { id } = req.params;
     const doc = await db.collection('ganado').doc(id).get();
 
@@ -47,7 +48,7 @@ router.get('/:id', async function (req, res, next) {
 // POST /ganado - Crear un nuevo registro de ganado
 router.post('/', async function (req, res, next) {
   try {
-    const { db } = require('../config/firebaseConfig');
+
     const data = req.body;
 
     // Add timestamps

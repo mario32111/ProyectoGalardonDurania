@@ -1,5 +1,6 @@
 var express = require('express');
 var router = express.Router();
+const { db, admin } = require('../config/firebaseConfig');
 
 /**
  * CRUD para Trámites
@@ -48,7 +49,7 @@ const TIPOS_TRAMITES = {
 // GET /tramites - Obtener todos los trámites
 router.get('/', async function (req, res, next) {
   try {
-    const { db } = require('../config/firebaseConfig');
+
     const { tipo, estado, usuario_id } = req.query;
 
     let query = db.collection('tramites');
@@ -89,7 +90,7 @@ router.get('/tipos', function (req, res, next) {
 // GET /tramites/:id - Obtener detalles de un trámite específico
 router.get('/:id', async function (req, res, next) {
   try {
-    const { db } = require('../config/firebaseConfig');
+
     const { id } = req.params;
     const doc = await db.collection('tramites').doc(id).get();
 
@@ -110,7 +111,7 @@ router.get('/:id', async function (req, res, next) {
 // GET /tramites/:id/seguimiento - Obtener seguimiento detallado del trámite
 router.get('/:id/seguimiento', async function (req, res, next) {
   try {
-    const { db } = require('../config/firebaseConfig');
+
     const { id } = req.params;
     const doc = await db.collection('tramites').doc(id).get();
 
@@ -141,7 +142,7 @@ router.get('/:id/seguimiento', async function (req, res, next) {
 // POST /tramites - Crear un nuevo trámite
 router.post('/', async function (req, res, next) {
   try {
-    const { db } = require('../config/firebaseConfig');
+
     const { tipo, usuario_id, ganado_ids, observaciones, documentos } = req.body;
 
     if (!TIPOS_TRAMITES[tipo]) {
@@ -189,7 +190,7 @@ router.post('/', async function (req, res, next) {
 // PUT /tramites/:id/avanzar-etapa - Avanzar a la siguiente etapa
 router.put('/:id/avanzar-etapa', async function (req, res, next) {
   try {
-    const { db, admin } = require('../config/firebaseConfig');
+
     const { id } = req.params;
     const { responsable, observaciones } = req.body;
 
@@ -243,7 +244,7 @@ router.put('/:id/avanzar-etapa', async function (req, res, next) {
 // PUT /tramites/:id/actualizar-etapa - Actualizar etapa específica
 router.put('/:id/actualizar-etapa', async function (req, res, next) {
   try {
-    const { db, admin } = require('../config/firebaseConfig');
+
     const { id } = req.params;
     const { etapa, responsable, observaciones } = req.body;
 
@@ -291,7 +292,7 @@ router.put('/:id/actualizar-etapa', async function (req, res, next) {
 // PUT /tramites/:id/estado - Cambiar estado del trámite
 router.put('/:id/estado', async function (req, res, next) {
   try {
-    const { db, admin } = require('../config/firebaseConfig');
+
     const { id } = req.params;
     const { estado, motivo } = req.body;
 
@@ -325,7 +326,7 @@ router.put('/:id/estado', async function (req, res, next) {
 // POST /tramites/:id/observaciones - Agregar observación al trámite
 router.post('/:id/observaciones', async function (req, res, next) {
   try {
-    const { db, admin } = require('../config/firebaseConfig');
+
     const { id } = req.params;
     const { observacion, usuario } = req.body;
 
@@ -352,7 +353,7 @@ router.post('/:id/observaciones', async function (req, res, next) {
 // POST /tramites/:id/documentos - Agregar documento al trámite
 router.post('/:id/documentos', async function (req, res, next) {
   try {
-    const { db, admin } = require('../config/firebaseConfig');
+
     const { id } = req.params;
     const { nombre_documento, tipo_documento, url } = req.body;
 
@@ -380,7 +381,7 @@ router.post('/:id/documentos', async function (req, res, next) {
 // GET /tramites/:id/documentos - Obtener documentos del trámite
 router.get('/:id/documentos', async function (req, res, next) {
   try {
-    const { db } = require('../config/firebaseConfig');
+
     const { id } = req.params;
 
     const doc = await db.collection('tramites').doc(id).get();
@@ -402,7 +403,7 @@ router.get('/:id/documentos', async function (req, res, next) {
 // DELETE /tramites/:id - Cancelar un trámite
 router.delete('/:id', async function (req, res, next) {
   try {
-    const { db, admin } = require('../config/firebaseConfig');
+
     const { id } = req.params;
     const { motivo } = req.body;
 
@@ -430,7 +431,7 @@ router.delete('/:id', async function (req, res, next) {
 // GET /tramites/usuario/:usuario_id - Obtener trámites de un usuario específico
 router.get('/usuario/:usuario_id', async function (req, res, next) {
   try {
-    const { db } = require('../config/firebaseConfig');
+
     const { usuario_id } = req.params;
 
     const snapshot = await db.collection('tramites').where('usuario_id', '==', usuario_id).get();
@@ -453,7 +454,7 @@ router.get('/usuario/:usuario_id', async function (req, res, next) {
 // GET /tramites/estadisticas - Obtener estadísticas generales de trámites
 router.get('/stats/general', async function (req, res, next) {
   try {
-    const { db } = require('../config/firebaseConfig');
+
 
     const snapshot = await db.collection('tramites').get();
     const total = snapshot.size;

@@ -1,5 +1,6 @@
 var express = require('express');
 var router = express.Router();
+const { db } = require('../config/firebaseConfig');
 var wss = require('../ws/stream');
 /**
  * Rutas para Chatbot
@@ -26,7 +27,7 @@ router.post('/message', async function (req, res, next) {
 // GET /chatbot/historial/:usuario_id - Obtener historial de conversaciones
 router.get('/historial/:usuario_id', async function (req, res, next) {
   try {
-    const { db } = require('../config/firebaseConfig');
+
     const { usuario_id } = req.params;
     const { limite = 50 } = req.query;
 
@@ -54,7 +55,7 @@ router.get('/historial/:usuario_id', async function (req, res, next) {
 // GET /chatbot/sesion/:sesion_id - Obtener mensajes de una sesión específica
 router.get('/sesion/:sesion_id', async function (req, res, next) {
   try {
-    const { db } = require('../config/firebaseConfig');
+
     const { sesion_id } = req.params;
 
     const doc = await db.collection('sesiones').doc(sesion_id).get();
@@ -79,7 +80,7 @@ router.get('/sesion/:sesion_id', async function (req, res, next) {
 // POST /chatbot/sesion/nueva - Iniciar una nueva sesión de chat
 router.post('/sesion/nueva', async function (req, res, next) {
   try {
-    const { db } = require('../config/firebaseConfig');
+
     const { usuario_id } = req.body;
 
     const nuevaSesion = {
@@ -106,7 +107,7 @@ router.post('/sesion/nueva', async function (req, res, next) {
 // DELETE /chatbot/sesion/:sesion_id - Finalizar/eliminar una sesión
 router.delete('/sesion/:sesion_id', async function (req, res, next) {
   try {
-    const { db } = require('../config/firebaseConfig');
+
     const { sesion_id } = req.params;
 
     await db.collection('sesiones').doc(sesion_id).delete();
@@ -123,7 +124,7 @@ router.delete('/sesion/:sesion_id', async function (req, res, next) {
 // POST /chatbot/feedback - Enviar feedback sobre una respuesta
 router.post('/feedback', async function (req, res, next) {
   try {
-    const { db } = require('../config/firebaseConfig');
+
     const { session_id, mensaje_id, calificacion, comentario } = req.body;
 
     const feedbackData = {

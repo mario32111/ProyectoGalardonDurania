@@ -1,5 +1,6 @@
 var express = require('express');
 var router = express.Router();
+const { db, admin } = require('../config/firebaseConfig');
 
 /**
  * CRUD para Inventario
@@ -10,7 +11,7 @@ var router = express.Router();
 // GET /inventario - Obtener todos los items del inventario
 router.get('/', async function (req, res, next) {
   try {
-    const { db } = require('../config/firebaseConfig');
+
     const snapshot = await db.collection('inventario').get();
     const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
@@ -27,7 +28,7 @@ router.get('/', async function (req, res, next) {
 // GET /inventario/:id - Obtener un item específico del inventario
 router.get('/:id', async function (req, res, next) {
   try {
-    const { db } = require('../config/firebaseConfig');
+
     const { id } = req.params;
     const doc = await db.collection('inventario').doc(id).get();
 
@@ -48,7 +49,7 @@ router.get('/:id', async function (req, res, next) {
 // POST /inventario - Agregar un nuevo item al inventario
 router.post('/', async function (req, res, next) {
   try {
-    const { db } = require('../config/firebaseConfig');
+
     const data = req.body;
 
     // Validar datos mínimos si es necesario
@@ -73,7 +74,7 @@ router.post('/', async function (req, res, next) {
 // PUT /inventario/:id - Actualizar un item del inventario
 router.put('/:id', async function (req, res, next) {
   try {
-    const { db } = require('../config/firebaseConfig');
+
     const { id } = req.params;
     const data = req.body;
 
@@ -95,7 +96,7 @@ router.put('/:id', async function (req, res, next) {
 // DELETE /inventario/:id - Eliminar un item del inventario
 router.delete('/:id', async function (req, res, next) {
   try {
-    const { db } = require('../config/firebaseConfig');
+
     const { id } = req.params;
 
     await db.collection('inventario').doc(id).delete();
@@ -112,7 +113,7 @@ router.delete('/:id', async function (req, res, next) {
 // PATCH /inventario/:id/stock - Actualizar solo el stock de un item
 router.patch('/:id/stock', async function (req, res, next) {
   try {
-    const { db, admin } = require('../config/firebaseConfig');
+
     const { id } = req.params;
     const { cantidad, operacion } = req.body; // operacion: 'agregar' o 'restar'
 
@@ -136,7 +137,7 @@ router.patch('/:id/stock', async function (req, res, next) {
 // GET /inventario/alertas/stock-bajo - Obtener items con stock bajo
 router.get('/alertas/stock-bajo', async function (req, res, next) {
   try {
-    const { db } = require('../config/firebaseConfig');
+
     // Asumimos que los items tienen un campo 'stockMinimo', si no, usamos un default (ej. 10)
     // Firestore no permite comparar dos campos del mismo documento en una query simple (where cantidad < stockMinimo).
     // Así que obtendremos todos y filtraremos, o haremos un where cantidad < X si usamos un umbral fijo.
