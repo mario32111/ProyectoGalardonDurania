@@ -1,7 +1,5 @@
 const { db, admin } = require('../config/firebaseConfig');
-const TIPOS_TRAMITES = require('../utils/tiposTramites'); // Recomiendo mover la constante a un archivo utils, pero por ahora la definiré aquí para simplificar
 
-// Si prefieres mantener la constante en el servicio:
 const TRAMITE_TYPES = {
     PRUEBAS_GANADO: {
         nombre: 'Pruebas de Ganado',

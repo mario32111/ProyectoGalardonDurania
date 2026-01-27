@@ -1,6 +1,8 @@
 const { createAzureClient } = require('../config/azureConfig.js');
 const { db, admin } = require('../config/firebaseConfig.js');
 
+const tramitesService = require('./tramitesService.js');
+
 const tools = [
     {
         type: "function",
@@ -68,10 +70,10 @@ class OpenAIService {
         const doc = await docRef.get();
 
         if (!doc.exists) {
-            // Si no existe, creamos la sesión con el contexto del sistema
             const systemContext = this.getSystemContext();
+            // Inicializamos con set
             await docRef.set({
-                fecha_inicio: new Date().toISOString(),
+                fecha_inicio: admin.firestore.FieldValue.serverTimestamp(),
                 mensajes: [systemContext]
             });
             return [systemContext];
@@ -106,11 +108,11 @@ class OpenAIService {
             const userMsg = { role: 'user', content: userMessageContent };
             history.push(userMsg);
 
-            // Guardar mensaje de usuario en DB
             if (sesion_id) {
-                await db.collection('sesiones').doc(sesion_id).update({
+                // CAMBIO: usamos set con merge en lugar de update
+                await db.collection('sesiones').doc(sesion_id).set({
                     mensajes: admin.firestore.FieldValue.arrayUnion(userMsg)
-                }).catch(e => console.error("Error guardando user msg:", e));
+                }, { merge: true }).catch(e => console.error("Error guardando user msg:", e));
             }
         }
 
@@ -161,19 +163,17 @@ class OpenAIService {
                 history.push(assistantMsg);
 
                 if (sesion_id) {
-                    await db.collection('sesiones').doc(sesion_id).update({
+                    // CAMBIO: usamos set con merge
+                    await db.collection('sesiones').doc(sesion_id).set({
                         mensajes: admin.firestore.FieldValue.arrayUnion(assistantMsg)
-                    }).catch(e => console.error("Error guardando AI msg:", e));
+                    }, { merge: true }).catch(e => console.error("Error guardando AI msg:", e));
                 }
-
                 this.emitEvent(ws, 'ai_end', { fullResponse: aiResponseContent });
             }
-
             // 3. Ejecución de Funciones
             if (tempToolCalls.length > 0) {
                 history.push({ role: "assistant", tool_calls: tempToolCalls });
 
-                // Actualizar historial completo con los tool_calls (porque son objetos complejos)
                 if (sesion_id) {
                     await db.collection('sesiones').doc(sesion_id).update({ mensajes: history });
                 }
@@ -182,9 +182,9 @@ class OpenAIService {
                     const functionName = tool.function.name;
                     const args = JSON.parse(tool.function.arguments);
 
-                    // LOG DE FUNCIÓN: Enviado al evento destinado
-                    this.emitEvent(ws, 'ai_log', { message: `Ejecutando lógica: ${functionName}`, params: args });
+                    this.emitEvent(ws, 'ai_log', { message: `Consultando base de datos: ${functionName}` });
 
+                    // LLAMADA AL DESPACHADOR CONECTADO AL SERVICIO REAL
                     const result = await this.handleFunctionCall(functionName, args);
 
                     const toolMsg = {
@@ -202,7 +202,6 @@ class OpenAIService {
                     }
                 }
 
-                // Segunda vuelta para que la IA responda con los datos obtenidos
                 return this.completion(sesion_id, "_FUNCTION_RESULT_", ws);
             }
 
@@ -213,14 +212,49 @@ class OpenAIService {
     }
 
     async handleFunctionCall(name, args) {
-        // Aquí conectas con tu Base de Datos real
-        switch (name) {
-            case "consultarEstatusSanitario":
-                return { upp: args.uppId, estatus: "ACTIVO", vigencia: "2026-12-31", pgn_cumplido: true };
-            case "consultarTramite":
-                return { id: args.tramite_id, etapa: "Inspección", porcentaje: "65%" };
-            default:
-                return { info: "Función ejecutada con éxito" };
+        try {
+            switch (name) {
+                case "obtenerTiposTramites":
+                    // Usamos la constante del servicio
+                    return tramitesService.getTipos();
+
+                case "consultarTramite":
+                    // Buscamos el trámite real en Firebase mediante el ID
+                    const tramite = await tramitesService.getSeguimiento(args.tramite_id);
+                    return tramite || { error: "Trámite no encontrado" };
+
+                case "crearTramite":
+                    // Creamos un trámite real en la colección de trámites
+                    // Nota: Aquí podrías necesitar el usuario_id real, si no viene en args
+                    // puedes pasarlo desde la sesión.
+                    const nuevoTramite = await tramitesService.create({
+                        tipo: args.tipo,
+                        uppId: args.uppId,
+                        usuario_id: "SISTEMA_CHATBOT", // O el ID real del usuario
+                        observaciones: args.observaciones
+                    });
+                    return nuevoTramite;
+
+                case "consultarEstatusSanitario":
+                    // Aquí podrías filtrar trámites de tipo PRUEBAS_GANADO para esa UPP
+                    // Para simplificar, consultamos si existen trámites completados de sanidad
+                    const pruebas = await tramitesService.getAll({
+                        tipo: 'PRUEBAS_GANADO',
+                        estado: 'COMPLETADO'
+                        // Podrías filtrar por uppId si tuvieras ese campo en la base
+                    });
+                    return {
+                        upp: args.uppId,
+                        vigente: pruebas.length > 0,
+                        total_pruebas: pruebas.length
+                    };
+
+                default:
+                    return { error: "Función no implementada" };
+            }
+        } catch (error) {
+            console.error(`Error ejecutando ${name}:`, error);
+            return { error: error.message };
         }
     }
 

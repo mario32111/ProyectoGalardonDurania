@@ -35,3 +35,6 @@ build/
 # Archivos temporales
 *.tmp
 *.swp
+
+# Firebase
+firebase-service-account.json
