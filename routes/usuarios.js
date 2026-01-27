@@ -7,13 +7,20 @@ var router = express.Router();
  */
 
 // GET /usuarios - Obtener todos los usuarios
-router.get('/', function(req, res, next) {
+router.get('/', async function (req, res, next) {
   try {
-    // TODO: Implementar lógica para obtener todos los usuarios
+    const { db } = require('../config/firebaseConfig');
+    const snapshot = await db.collection('usuarios').get();
+    const usuarios = snapshot.docs.map(doc => {
+      const data = doc.data();
+      delete data.password; // No devolver contraseñas
+      return { id: doc.id, ...data };
+    });
+
     res.status(200).json({
       success: true,
       message: 'Lista de usuarios',
-      data: []
+      data: usuarios
     });
   } catch (error) {
     next(error);
@@ -21,14 +28,23 @@ router.get('/', function(req, res, next) {
 });
 
 // GET /usuarios/:id - Obtener un usuario específico
-router.get('/:id', function(req, res, next) {
+router.get('/:id', async function (req, res, next) {
   try {
+    const { db } = require('../config/firebaseConfig');
     const { id } = req.params;
-    // TODO: Implementar lógica para obtener un usuario específico
+    const doc = await db.collection('usuarios').doc(id).get();
+
+    if (!doc.exists) {
+      return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
+    }
+
+    const data = doc.data();
+    delete data.password;
+
     res.status(200).json({
       success: true,
       message: `Usuario con ID: ${id}`,
-      data: {}
+      data: { id: doc.id, ...data }
     });
   } catch (error) {
     next(error);
@@ -36,16 +52,31 @@ router.get('/:id', function(req, res, next) {
 });
 
 // POST /usuarios - Crear un nuevo usuario
-router.post('/', function(req, res, next) {
+router.post('/', async function (req, res, next) {
   try {
+    const { db } = require('../config/firebaseConfig');
     const data = req.body;
-    // TODO: Validar datos y crear nuevo usuario
-    // Campos sugeridos: nombre, email, password, rol, telefono, etc.
-    // IMPORTANTE: Hashear password antes de guardar
+
+    // Check if email already exists
+    const emailCheck = await db.collection('usuarios').where('email', '==', data.email).get();
+    if (!emailCheck.empty) {
+      return res.status(400).json({ success: false, message: 'El email ya está registrado' });
+    }
+
+    // TODO: Hash password here in a real app
+    const newUser = {
+      ...data,
+      createdAt: new Date().toISOString()
+    };
+
+    const docRef = await db.collection('usuarios').add(newUser);
+
+    delete newUser.password;
+
     res.status(201).json({
       success: true,
       message: 'Usuario creado exitosamente',
-      data: data
+      data: { id: docRef.id, ...newUser }
     });
   } catch (error) {
     next(error);
@@ -53,15 +84,21 @@ router.post('/', function(req, res, next) {
 });
 
 // PUT /usuarios/:id - Actualizar un usuario
-router.put('/:id', function(req, res, next) {
+router.put('/:id', async function (req, res, next) {
   try {
+    const { db } = require('../config/firebaseConfig');
     const { id } = req.params;
     const data = req.body;
-    // TODO: Validar y actualizar el usuario
+
+    const updateData = { ...data, updatedAt: new Date().toISOString() };
+
+    await db.collection('usuarios').doc(id).update(updateData);
+    delete updateData.password;
+
     res.status(200).json({
       success: true,
       message: `Usuario ${id} actualizado`,
-      data: data
+      data: { id, ...updateData }
     });
   } catch (error) {
     next(error);
@@ -69,10 +106,13 @@ router.put('/:id', function(req, res, next) {
 });
 
 // DELETE /usuarios/:id - Eliminar un usuario
-router.delete('/:id', function(req, res, next) {
+router.delete('/:id', async function (req, res, next) {
   try {
+    const { db } = require('../config/firebaseConfig');
     const { id } = req.params;
-    // TODO: Implementar lógica de eliminación
+
+    await db.collection('usuarios').doc(id).delete();
+
     res.status(200).json({
       success: true,
       message: `Usuario ${id} eliminado`
@@ -83,15 +123,39 @@ router.delete('/:id', function(req, res, next) {
 });
 
 // POST /usuarios/login - Autenticación de usuario
-router.post('/login', function(req, res, next) {
+router.post('/login', async function (req, res, next) {
   try {
+    const { db } = require('../config/firebaseConfig');
     const { email, password } = req.body;
-    // TODO: Implementar lógica de autenticación
-    // Validar credenciales y generar token
+
+    // Buscar usuario por email
+    const usersByType = await db.collection('usuarios').where('email', '==', email).limit(1).get();
+
+    if (usersByType.empty) {
+      return res.status(401).json({ success: false, message: 'Credenciales inválidas' });
+    }
+
+    const userDoc = usersByType.docs[0];
+    const userData = userDoc.data();
+
+    // Verificación simple (En prod usar bcrypt.compare)
+    if (userData.password !== password) {
+      return res.status(401).json({ success: false, message: 'Credenciales inválidas' });
+    }
+
+    // Retornamos ID del documento como "token" simplificado o usamos custom token
+    // const token = await admin.auth().createCustomToken(userDoc.id);
+
     res.status(200).json({
       success: true,
       message: 'Login exitoso',
-      token: 'token_placeholder'
+      token: userDoc.id, // En un sistema real, esto sería un JWT
+      user: {
+        id: userDoc.id,
+        email: userData.email,
+        nombre: userData.nombre,
+        rol: userData.rol
+      }
     });
   } catch (error) {
     next(error);

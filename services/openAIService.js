@@ -1,4 +1,5 @@
 const { createAzureClient } = require('../config/azureConfig.js');
+const { db, admin } = require('../config/firebaseConfig.js');
 
 const tools = [
     {
@@ -56,10 +57,28 @@ const tools = [
 ];
 
 class OpenAIService {
-    sessions = new Map();
-
     constructor() {
         this.client = createAzureClient();
+    }
+
+    async getSessionHistory(sesion_id) {
+        if (!sesion_id) return [this.getSystemContext()];
+
+        const docRef = db.collection('sesiones').doc(sesion_id);
+        const doc = await docRef.get();
+
+        if (!doc.exists) {
+            // Si no existe, creamos la sesión con el contexto del sistema
+            const systemContext = this.getSystemContext();
+            await docRef.set({
+                fecha_inicio: new Date().toISOString(),
+                mensajes: [systemContext]
+            });
+            return [systemContext];
+        }
+
+        const data = doc.data();
+        return data.mensajes || [this.getSystemContext()];
     }
 
     getSystemContext() {
@@ -71,19 +90,28 @@ class OpenAIService {
         };
     }
 
-    getSessionHistory(sesion_id) {
-        if (!this.sessions.has(sesion_id)) {
-            this.sessions.set(sesion_id, [this.getSystemContext()]);
-        }
-        return this.sessions.get(sesion_id);
-    }
-
     async completion(sesion_id, userMessageContent, ws) {
-        const history = this.getSessionHistory(sesion_id);
-        
+        // Obtenemos historial DB (async)
+        // Usar try/catch para manejar errores de DB
+        let history;
+        try {
+            history = await this.getSessionHistory(sesion_id);
+        } catch (e) {
+            console.error("Error obteniendo historial:", e);
+            history = [this.getSystemContext()];
+        }
+
         // Evitamos duplicar el mensaje si es una re-entrada por función
         if (userMessageContent !== "_FUNCTION_RESULT_") {
-            history.push({ role: 'user', content: userMessageContent });
+            const userMsg = { role: 'user', content: userMessageContent };
+            history.push(userMsg);
+
+            // Guardar mensaje de usuario en DB
+            if (sesion_id) {
+                await db.collection('sesiones').doc(sesion_id).update({
+                    mensajes: admin.firestore.FieldValue.arrayUnion(userMsg)
+                }).catch(e => console.error("Error guardando user msg:", e));
+            }
         }
 
         let aiResponseContent = "";
@@ -129,13 +157,26 @@ class OpenAIService {
 
             // Guardar respuesta de texto si existe
             if (aiResponseContent) {
-                history.push({ role: 'assistant', content: aiResponseContent });
+                const assistantMsg = { role: 'assistant', content: aiResponseContent };
+                history.push(assistantMsg);
+
+                if (sesion_id) {
+                    await db.collection('sesiones').doc(sesion_id).update({
+                        mensajes: admin.firestore.FieldValue.arrayUnion(assistantMsg)
+                    }).catch(e => console.error("Error guardando AI msg:", e));
+                }
+
                 this.emitEvent(ws, 'ai_end', { fullResponse: aiResponseContent });
             }
 
             // 3. Ejecución de Funciones
             if (tempToolCalls.length > 0) {
                 history.push({ role: "assistant", tool_calls: tempToolCalls });
+
+                // Actualizar historial completo con los tool_calls (porque son objetos complejos)
+                if (sesion_id) {
+                    await db.collection('sesiones').doc(sesion_id).update({ mensajes: history });
+                }
 
                 for (const tool of tempToolCalls) {
                     const functionName = tool.function.name;
@@ -146,12 +187,19 @@ class OpenAIService {
 
                     const result = await this.handleFunctionCall(functionName, args);
 
-                    history.push({
+                    const toolMsg = {
                         role: "tool",
                         tool_call_id: tool.id,
                         name: functionName,
                         content: JSON.stringify(result)
-                    });
+                    };
+                    history.push(toolMsg);
+
+                    if (sesion_id) {
+                        await db.collection('sesiones').doc(sesion_id).update({
+                            mensajes: admin.firestore.FieldValue.arrayUnion(toolMsg)
+                        });
+                    }
                 }
 
                 // Segunda vuelta para que la IA responda con los datos obtenidos
@@ -159,6 +207,7 @@ class OpenAIService {
             }
 
         } catch (error) {
+            console.error("Error en completion:", error);
             this.emitEvent(ws, 'remote_error', { details: error.message });
         }
     }
@@ -178,9 +227,12 @@ class OpenAIService {
     emitEvent(ws, event, data) {
         const payload = JSON.stringify({ event, ...data });
         // Priorizamos ws.send para asegurar que el cliente de socket reciba el JSON plano
-        if (ws.send) {
-            ws.send(payload);
-        } else if (ws.emit) {
+        if (ws && ws.send) {
+            // Verificar estado si es posible, o intentar enviar
+            if (ws.readyState === 1 || ws.readyState === undefined) {
+                try { ws.send(payload); } catch (e) { console.error("Error enviando WS:", e); }
+            }
+        } else if (ws && ws.emit) {
             ws.emit(event, data);
         }
     }

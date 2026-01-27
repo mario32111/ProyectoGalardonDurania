@@ -46,18 +46,26 @@ const TIPOS_TRAMITES = {
 };
 
 // GET /tramites - Obtener todos los trámites
-router.get('/', function(req, res, next) {
+router.get('/', async function (req, res, next) {
   try {
+    const { db } = require('../config/firebaseConfig');
     const { tipo, estado, usuario_id } = req.query;
-    // TODO: Implementar filtros por tipo, estado, usuario
-    // TODO: Obtener trámites desde la base de datos
-    
+
+    let query = db.collection('tramites');
+
+    if (tipo) query = query.where('tipo', '==', tipo);
+    if (estado) query = query.where('estado', '==', estado);
+    if (usuario_id) query = query.where('usuario_id', '==', usuario_id);
+
+    const snapshot = await query.get();
+    const tramites = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
     res.status(200).json({
       success: true,
       message: 'Lista de trámites',
       data: {
-        tramites: [],
-        total: 0
+        tramites: tramites,
+        total: tramites.length
       }
     });
   } catch (error) {
@@ -66,7 +74,7 @@ router.get('/', function(req, res, next) {
 });
 
 // GET /tramites/tipos - Obtener tipos de trámites disponibles y sus etapas
-router.get('/tipos', function(req, res, next) {
+router.get('/tipos', function (req, res, next) {
   try {
     res.status(200).json({
       success: true,
@@ -79,43 +87,20 @@ router.get('/tipos', function(req, res, next) {
 });
 
 // GET /tramites/:id - Obtener detalles de un trámite específico
-router.get('/:id', function(req, res, next) {
+router.get('/:id', async function (req, res, next) {
   try {
+    const { db } = require('../config/firebaseConfig');
     const { id } = req.params;
-    // TODO: Obtener trámite desde la base de datos
-    
-    // Ejemplo de estructura de respuesta
-    const tramiteEjemplo = {
-      id: id,
-      tipo: 'PRUEBAS_GANADO',
-      tipo_nombre: 'Pruebas de Ganado',
-      numero_tramite: 'TRM-2026-001',
-      solicitante: {
-        usuario_id: '123',
-        nombre: 'Juan Pérez',
-        email: 'juan@example.com'
-      },
-      ganado_relacionado: ['ganado_001', 'ganado_002'],
-      fecha_solicitud: new Date(),
-      fecha_estimada_finalizacion: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-      etapa_actual: {
-        orden: 3,
-        nombre: 'Toma de Muestras',
-        descripcion: 'Veterinario tomando muestras del ganado',
-        fecha_inicio: new Date()
-      },
-      total_etapas: 6,
-      progreso_porcentaje: 50,
-      estado: 'EN_PROCESO', // EN_PROCESO, COMPLETADO, CANCELADO, PENDIENTE
-      historial: [],
-      observaciones: '',
-      documentos_adjuntos: []
-    };
-    
+    const doc = await db.collection('tramites').doc(id).get();
+
+    if (!doc.exists) {
+      return res.status(404).json({ success: false, message: 'Trámite no encontrado' });
+    }
+
     res.status(200).json({
       success: true,
       message: `Trámite ${id}`,
-      data: tramiteEjemplo
+      data: { id: doc.id, ...doc.data() }
     });
   } catch (error) {
     next(error);
@@ -123,51 +108,29 @@ router.get('/:id', function(req, res, next) {
 });
 
 // GET /tramites/:id/seguimiento - Obtener seguimiento detallado del trámite
-router.get('/:id/seguimiento', function(req, res, next) {
+router.get('/:id/seguimiento', async function (req, res, next) {
   try {
+    const { db } = require('../config/firebaseConfig');
     const { id } = req.params;
-    // TODO: Obtener historial completo de cambios de etapa
-    
+    const doc = await db.collection('tramites').doc(id).get();
+
+    if (!doc.exists) {
+      return res.status(404).json({ success: false, message: 'Trámite no encontrado' });
+    }
+
+    const data = doc.data();
+
     res.status(200).json({
       success: true,
       message: 'Seguimiento del trámite',
       data: {
         tramite_id: id,
-        numero_tramite: 'TRM-2026-001',
-        tipo: 'PRUEBAS_GANADO',
-        estado_actual: 'EN_PROCESO',
-        etapa_actual: 3,
-        historial: [
-          {
-            etapa: 1,
-            nombre: 'Solicitud Recibida',
-            fecha_inicio: new Date('2026-01-20'),
-            fecha_fin: new Date('2026-01-20'),
-            responsable: 'Sistema',
-            observaciones: 'Trámite creado automáticamente'
-          },
-          {
-            etapa: 2,
-            nombre: 'Programación de Visita',
-            fecha_inicio: new Date('2026-01-21'),
-            fecha_fin: new Date('2026-01-22'),
-            responsable: 'María González',
-            observaciones: 'Visita programada para el 25/01/2026'
-          },
-          {
-            etapa: 3,
-            nombre: 'Toma de Muestras',
-            fecha_inicio: new Date('2026-01-25'),
-            fecha_fin: null,
-            responsable: 'Dr. Carlos Ramírez',
-            observaciones: 'En proceso'
-          }
-        ],
-        proxima_etapa: {
-          orden: 4,
-          nombre: 'Muestras en Laboratorio',
-          descripcion: 'Análisis en proceso'
-        }
+        numero_tramite: data.numero_tramite,
+        tipo: data.tipo,
+        estado_actual: data.estado,
+        etapa_actual: data.etapa_actual,
+        historial: data.historial || [],
+        proxima_etapa: TIPOS_TRAMITES[data.tipo]?.etapas.find(e => e.orden === data.etapa_actual + 1) || null
       }
     });
   } catch (error) {
@@ -176,11 +139,11 @@ router.get('/:id/seguimiento', function(req, res, next) {
 });
 
 // POST /tramites - Crear un nuevo trámite
-router.post('/', function(req, res, next) {
+router.post('/', async function (req, res, next) {
   try {
+    const { db } = require('../config/firebaseConfig');
     const { tipo, usuario_id, ganado_ids, observaciones, documentos } = req.body;
-    
-    // TODO: Validar que el tipo de trámite sea válido
+
     if (!TIPOS_TRAMITES[tipo]) {
       return res.status(400).json({
         success: false,
@@ -188,29 +151,35 @@ router.post('/', function(req, res, next) {
         error: `Los tipos válidos son: ${Object.keys(TIPOS_TRAMITES).join(', ')}`
       });
     }
-    
-    // TODO: Crear trámite en base de datos
-    // TODO: Generar número de trámite único
-    // TODO: Inicializar en la primera etapa
-    
+
+    // Generar nuevo trámite
     const nuevoTramite = {
-      id: `tramite_${Date.now()}`,
       numero_tramite: `TRM-2026-${String(Math.floor(Math.random() * 1000)).padStart(3, '0')}`,
       tipo: tipo,
       tipo_nombre: TIPOS_TRAMITES[tipo].nombre,
       usuario_id: usuario_id,
       ganado_ids: ganado_ids || [],
-      fecha_solicitud: new Date(),
+      fecha_solicitud: new Date().toISOString(),
       etapa_actual: 1,
       estado: 'PENDIENTE',
       observaciones: observaciones || '',
-      documentos: documentos || []
+      documentos: documentos || [],
+      historial: [{
+        etapa: 1,
+        nombre: 'Solicitud Recibida',
+        fecha_inicio: new Date().toISOString(),
+        fecha_fin: null,
+        responsable: 'Sistema',
+        observaciones: 'Trámite creado'
+      }]
     };
-    
+
+    const docRef = await db.collection('tramites').add(nuevoTramite);
+
     res.status(201).json({
       success: true,
       message: 'Trámite creado exitosamente',
-      data: nuevoTramite
+      data: { id: docRef.id, ...nuevoTramite }
     });
   } catch (error) {
     next(error);
@@ -218,25 +187,52 @@ router.post('/', function(req, res, next) {
 });
 
 // PUT /tramites/:id/avanzar-etapa - Avanzar a la siguiente etapa
-router.put('/:id/avanzar-etapa', function(req, res, next) {
+router.put('/:id/avanzar-etapa', async function (req, res, next) {
   try {
+    const { db, admin } = require('../config/firebaseConfig');
     const { id } = req.params;
     const { responsable, observaciones } = req.body;
-    
-    // TODO: Verificar que el trámite exista
-    // TODO: Verificar que no esté en la última etapa
-    // TODO: Avanzar a la siguiente etapa
-    // TODO: Registrar en el historial
-    
+
+    const tramitRef = db.collection('tramites').doc(id);
+    const doc = await tramitRef.get();
+
+    if (!doc.exists) return res.status(404).json({ success: false, message: 'Trámite no encontrado' });
+
+    const data = doc.data();
+    if (!TIPOS_TRAMITES[data.tipo]) return res.status(400).json({ success: false, message: 'Tipo de trámite desconocido' });
+
+    const currentEtapa = data.etapa_actual;
+    const tipoInfo = TIPOS_TRAMITES[data.tipo];
+
+    if (currentEtapa >= tipoInfo.etapas.length) {
+      return res.status(400).json({ success: false, message: 'El trámite ya está en la última etapa' });
+    }
+
+    const nextEtapaNum = currentEtapa + 1;
+    const nextEtapaInfo = tipoInfo.etapas.find(e => e.orden === nextEtapaNum);
+
+    const newHistoryItem = {
+      etapa: nextEtapaNum,
+      nombre: nextEtapaInfo ? nextEtapaInfo.nombre : 'Etapa desconocida',
+      fecha_inicio: new Date().toISOString(),
+      responsable: responsable || 'Sistema',
+      observaciones: observaciones || ''
+    };
+
+    await tramitRef.update({
+      etapa_actual: nextEtapaNum,
+      historial: admin.firestore.FieldValue.arrayUnion(newHistoryItem),
+      estado: nextEtapaNum === tipoInfo.etapas.length ? 'COMPLETADO' : 'EN_PROCESO'
+    });
+
     res.status(200).json({
       success: true,
       message: 'Trámite avanzado a la siguiente etapa',
       data: {
         tramite_id: id,
-        etapa_anterior: 3,
-        etapa_actual: 4,
-        responsable: responsable,
-        fecha_cambio: new Date()
+        etapa_anterior: currentEtapa,
+        etapa_actual: nextEtapaNum,
+        nuevo_historial: newHistoryItem
       }
     });
   } catch (error) {
@@ -245,23 +241,46 @@ router.put('/:id/avanzar-etapa', function(req, res, next) {
 });
 
 // PUT /tramites/:id/actualizar-etapa - Actualizar etapa específica
-router.put('/:id/actualizar-etapa', function(req, res, next) {
+router.put('/:id/actualizar-etapa', async function (req, res, next) {
   try {
+    const { db, admin } = require('../config/firebaseConfig');
     const { id } = req.params;
     const { etapa, responsable, observaciones } = req.body;
-    
-    // TODO: Validar que la etapa sea válida para el tipo de trámite
-    // TODO: Actualizar la etapa
-    // TODO: Registrar en el historial
-    
+
+    const tramitRef = db.collection('tramites').doc(id);
+    const doc = await tramitRef.get();
+
+    if (!doc.exists) return res.status(404).json({ success: false, message: 'Trámite no encontrado' });
+    const data = doc.data();
+    if (!TIPOS_TRAMITES[data.tipo]) return res.status(400).json({ success: false, message: 'Tipo de trámite desconocido' });
+
+    const tipoInfo = TIPOS_TRAMITES[data.tipo];
+    if (etapa < 1 || etapa > tipoInfo.etapas.length) {
+      return res.status(400).json({ success: false, message: 'Número de etapa inválido' });
+    }
+    const etapaInfo = tipoInfo.etapas.find(e => e.orden === etapa);
+
+    const historyUpdate = {
+      etapa: etapa,
+      nombre: etapaInfo ? etapaInfo.nombre : 'Etapa ' + etapa,
+      fecha_actualizacion: new Date().toISOString(),
+      responsable: responsable || 'Admin',
+      observaciones: observaciones || 'Actualización manual de etapa'
+    };
+
+    await tramitRef.update({
+      etapa_actual: etapa,
+      historial: admin.firestore.FieldValue.arrayUnion(historyUpdate)
+    });
+
     res.status(200).json({
       success: true,
       message: 'Etapa del trámite actualizada',
       data: {
         tramite_id: id,
         etapa_actual: etapa,
-        responsable: responsable,
-        observaciones: observaciones
+        responsable,
+        observaciones
       }
     });
   } catch (error) {
@@ -270,34 +289,33 @@ router.put('/:id/actualizar-etapa', function(req, res, next) {
 });
 
 // PUT /tramites/:id/estado - Cambiar estado del trámite
-router.put('/:id/estado', function(req, res, next) {
+router.put('/:id/estado', async function (req, res, next) {
   try {
+    const { db, admin } = require('../config/firebaseConfig');
     const { id } = req.params;
     const { estado, motivo } = req.body;
-    
-    // Estados válidos: EN_PROCESO, COMPLETADO, CANCELADO, PENDIENTE
+
     const estadosValidos = ['EN_PROCESO', 'COMPLETADO', 'CANCELADO', 'PENDIENTE'];
-    
     if (!estadosValidos.includes(estado)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Estado no válido',
-        error: `Los estados válidos son: ${estadosValidos.join(', ')}`
-      });
+      return res.status(400).json({ success: false, message: 'Estado no válido' });
     }
-    
-    // TODO: Actualizar estado en base de datos
-    // TODO: Registrar cambio en historial
-    
+
+    const historyItem = {
+      tipo: 'CAMBIO_ESTADO',
+      nuevo_estado: estado,
+      motivo: motivo || '',
+      fecha: new Date().toISOString()
+    };
+
+    await db.collection('tramites').doc(id).update({
+      estado: estado,
+      historial: admin.firestore.FieldValue.arrayUnion(historyItem)
+    });
+
     res.status(200).json({
       success: true,
       message: 'Estado del trámite actualizado',
-      data: {
-        tramite_id: id,
-        nuevo_estado: estado,
-        motivo: motivo,
-        fecha_cambio: new Date()
-      }
+      data: { tramite_id: id, nuevo_estado: estado }
     });
   } catch (error) {
     next(error);
@@ -305,22 +323,26 @@ router.put('/:id/estado', function(req, res, next) {
 });
 
 // POST /tramites/:id/observaciones - Agregar observación al trámite
-router.post('/:id/observaciones', function(req, res, next) {
+router.post('/:id/observaciones', async function (req, res, next) {
   try {
+    const { db, admin } = require('../config/firebaseConfig');
     const { id } = req.params;
     const { observacion, usuario } = req.body;
-    
-    // TODO: Agregar observación al trámite
-    
+
+    const newObs = {
+      observacion,
+      usuario,
+      fecha: new Date().toISOString()
+    };
+
+    await db.collection('tramites').doc(id).update({
+      observaciones_list: admin.firestore.FieldValue.arrayUnion(newObs)
+    });
+
     res.status(200).json({
       success: true,
       message: 'Observación agregada',
-      data: {
-        tramite_id: id,
-        observacion: observacion,
-        usuario: usuario,
-        fecha: new Date()
-      }
+      data: newObs
     });
   } catch (error) {
     next(error);
@@ -328,25 +350,27 @@ router.post('/:id/observaciones', function(req, res, next) {
 });
 
 // POST /tramites/:id/documentos - Agregar documento al trámite
-router.post('/:id/documentos', function(req, res, next) {
+router.post('/:id/documentos', async function (req, res, next) {
   try {
+    const { db, admin } = require('../config/firebaseConfig');
     const { id } = req.params;
     const { nombre_documento, tipo_documento, url } = req.body;
-    
-    // TODO: Guardar referencia del documento
-    
+
+    const newDoc = {
+      nombre: nombre_documento,
+      tipo: tipo_documento,
+      url: url,
+      fecha_subida: new Date().toISOString()
+    };
+
+    await db.collection('tramites').doc(id).update({
+      documentos: admin.firestore.FieldValue.arrayUnion(newDoc)
+    });
+
     res.status(200).json({
       success: true,
       message: 'Documento agregado al trámite',
-      data: {
-        tramite_id: id,
-        documento: {
-          nombre: nombre_documento,
-          tipo: tipo_documento,
-          url: url,
-          fecha_subida: new Date()
-        }
-      }
+      data: newDoc
     });
   } catch (error) {
     next(error);
@@ -354,17 +378,20 @@ router.post('/:id/documentos', function(req, res, next) {
 });
 
 // GET /tramites/:id/documentos - Obtener documentos del trámite
-router.get('/:id/documentos', function(req, res, next) {
+router.get('/:id/documentos', async function (req, res, next) {
   try {
+    const { db } = require('../config/firebaseConfig');
     const { id } = req.params;
-    // TODO: Obtener documentos desde base de datos
-    
+
+    const doc = await db.collection('tramites').doc(id).get();
+    if (!doc.exists) return res.status(404).json({ success: false, message: 'Trámite no encontrado' });
+
     res.status(200).json({
       success: true,
       message: 'Documentos del trámite',
       data: {
         tramite_id: id,
-        documentos: []
+        documentos: doc.data().documentos || []
       }
     });
   } catch (error) {
@@ -373,23 +400,27 @@ router.get('/:id/documentos', function(req, res, next) {
 });
 
 // DELETE /tramites/:id - Cancelar un trámite
-router.delete('/:id', function(req, res, next) {
+router.delete('/:id', async function (req, res, next) {
   try {
+    const { db, admin } = require('../config/firebaseConfig');
     const { id } = req.params;
     const { motivo } = req.body;
-    
-    // TODO: Marcar trámite como cancelado (no eliminar, mantener historial)
-    // TODO: Registrar motivo de cancelación
-    
+
+    const historyItem = {
+      tipo: 'CANCELACION',
+      motivo: motivo || 'Cancelado por usuario',
+      fecha: new Date().toISOString()
+    };
+
+    await db.collection('tramites').doc(id).update({
+      estado: 'CANCELADO',
+      historial: admin.firestore.FieldValue.arrayUnion(historyItem)
+    });
+
     res.status(200).json({
       success: true,
       message: 'Trámite cancelado',
-      data: {
-        tramite_id: id,
-        estado: 'CANCELADO',
-        motivo: motivo,
-        fecha_cancelacion: new Date()
-      }
+      data: { tramite_id: id, estado: 'CANCELADO' }
     });
   } catch (error) {
     next(error);
@@ -397,20 +428,21 @@ router.delete('/:id', function(req, res, next) {
 });
 
 // GET /tramites/usuario/:usuario_id - Obtener trámites de un usuario específico
-router.get('/usuario/:usuario_id', function(req, res, next) {
+router.get('/usuario/:usuario_id', async function (req, res, next) {
   try {
+    const { db } = require('../config/firebaseConfig');
     const { usuario_id } = req.params;
-    const { estado } = req.query;
-    
-    // TODO: Obtener trámites del usuario con filtros opcionales
-    
+
+    const snapshot = await db.collection('tramites').where('usuario_id', '==', usuario_id).get();
+    const tramites = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
     res.status(200).json({
       success: true,
       message: `Trámites del usuario ${usuario_id}`,
       data: {
         usuario_id: usuario_id,
-        tramites: [],
-        total: 0
+        tramites: tramites,
+        total: tramites.length
       }
     });
   } catch (error) {
@@ -419,28 +451,29 @@ router.get('/usuario/:usuario_id', function(req, res, next) {
 });
 
 // GET /tramites/estadisticas - Obtener estadísticas generales de trámites
-router.get('/stats/general', function(req, res, next) {
+router.get('/stats/general', async function (req, res, next) {
   try {
-    // TODO: Calcular estadísticas desde base de datos
-    
+    const { db } = require('../config/firebaseConfig');
+
+    const snapshot = await db.collection('tramites').get();
+    const total = snapshot.size;
+
+    const stats = {
+      total_tramites: total,
+      por_tipo: {},
+      por_estado: {}
+    };
+
+    snapshot.forEach(doc => {
+      const d = doc.data();
+      stats.por_tipo[d.tipo] = (stats.por_tipo[d.tipo] || 0) + 1;
+      stats.por_estado[d.estado] = (stats.por_estado[d.estado] || 0) + 1;
+    });
+
     res.status(200).json({
       success: true,
       message: 'Estadísticas de trámites',
-      data: {
-        total_tramites: 0,
-        por_tipo: {
-          PRUEBAS_GANADO: 0,
-          MOVILIZACION: 0,
-          EXPORTACION: 0
-        },
-        por_estado: {
-          PENDIENTE: 0,
-          EN_PROCESO: 0,
-          COMPLETADO: 0,
-          CANCELADO: 0
-        },
-        tiempo_promedio_finalizacion: 0
-      }
+      data: stats
     });
   } catch (error) {
     next(error);
