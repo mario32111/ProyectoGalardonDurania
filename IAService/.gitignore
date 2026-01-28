@@ -7,6 +7,4 @@ venv/
 build/
 dist/
 *.egg-info/
-models_emotion/
-models_env/
 models_whisper/
