@@ -1,7 +1,7 @@
 var express = require('express');
 var router = express.Router();
 const chatbotService = require('../services/chatbotService');
-var wss = require('../ws/stream');
+const EventEmitter = require('events');
 /**
  * Rutas para Chatbot
  * Gestión de interacciones con el chatbot de la plataforma ganadera
@@ -16,8 +16,28 @@ router.post('/message', async function (req, res, next) {
 
     const openAIService = require('../services/openAIService');
 
+    // Crear un adaptador HTTP que emula la interfaz de ws para capturar la respuesta
+    const httpAdapter = new EventEmitter();
+    let fullResponse = '';
+
+    // emitEvent() en openAIService usa ws.emit() si no tiene ws.send()
+    // Capturamos los eventos emitidos
+    httpAdapter.on('ai_chunk', (data) => {
+      fullResponse += data.chunk;
+    });
+
     // Llamamos al servicio pasando el adaptador
-    await openAIService.completion(session_id, message, wss);
+    await openAIService.completion(session_id, message, httpAdapter);
+
+    // Enviamos la respuesta completa al cliente HTTP
+    res.status(200).json({
+      success: true,
+      message: 'Respuesta del chatbot',
+      data: {
+        response: fullResponse,
+        session_id: session_id
+      }
+    });
 
   } catch (error) {
     next(error);

@@ -118,7 +118,7 @@ class OpenAIService {
 
                 ### 🎯 OBJETIVO FINAL
                 Transformar la experiencia del productor de un proceso lento y físico a uno digital, transparente y rápido, asegurando que el personal de la asociación reciba expedientes ya validados y completos.`
-            };
+        };
     }
 
     async completion(sesion_id, userMessageContent, ws) {
