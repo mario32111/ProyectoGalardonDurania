@@ -2,6 +2,34 @@ var express = require('express');
 var router = express.Router();
 const chatbotService = require('../services/chatbotService');
 const EventEmitter = require('events');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+const speechService = require('../services/speechService');
+
+// Configurar multer para almacenar archivos de audio temporalmente
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadDir = path.join(__dirname, '..', 'uploads');
+    if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    cb(null, `audio_${Date.now()}${path.extname(file.originalname)}`);
+  }
+});
+const upload = multer({
+  storage,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB máximo
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = ['audio/wav', 'audio/wave', 'audio/x-wav', 'audio/mpeg', 'audio/mp3', 'audio/ogg', 'audio/webm', 'audio/mp4'];
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error(`Tipo de audio no soportado: ${file.mimetype}. Usa WAV, MP3, OGG o WebM.`));
+    }
+  }
+});
 /**
  * Rutas para Chatbot
  * Gestión de interacciones con el chatbot de la plataforma ganadera
@@ -137,6 +165,105 @@ router.get('/sugerencias', async function (req, res, next) {
       }
     });
   } catch (error) {
+    next(error);
+  }
+});
+
+// ============================
+// RUTAS DE AUDIO (Speech-to-Text)
+// ============================
+
+// POST /chatbot/audio - Transcribir un archivo de audio a texto
+router.post('/audio', upload.single('audio'), async function (req, res, next) {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: 'No se recibió ningún archivo de audio. Envía un archivo con el campo "audio".'
+      });
+    }
+
+    console.log('🎙️ Audio recibido:', req.file.originalname, `(${(req.file.size / 1024).toFixed(1)}KB)`);
+
+    const result = await speechService.transcribeFile(req.file.path);
+
+    // Limpiar archivo temporal
+    fs.unlink(req.file.path, (err) => {
+      if (err) console.error('Error eliminando archivo temporal:', err);
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Audio transcrito exitosamente',
+      data: {
+        text: result.text,
+        segments: result.segments
+      }
+    });
+  } catch (error) {
+    // Limpiar archivo si hubo error
+    if (req.file && fs.existsSync(req.file.path)) {
+      fs.unlink(req.file.path, () => { });
+    }
+    next(error);
+  }
+});
+
+// POST /chatbot/audio-chat - Transcribir audio y enviarlo al chatbot en un solo paso
+router.post('/audio-chat', upload.single('audio'), async function (req, res, next) {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: 'No se recibió ningún archivo de audio. Envía un archivo con el campo "audio".'
+      });
+    }
+
+    const { session_id } = req.body;
+    console.log('🎙️ Audio-Chat recibido:', req.file.originalname, `(${(req.file.size / 1024).toFixed(1)}KB)`);
+
+    // Paso 1: Transcribir audio
+    const transcription = await speechService.transcribeFile(req.file.path);
+
+    // Limpiar archivo temporal
+    fs.unlink(req.file.path, (err) => {
+      if (err) console.error('Error eliminando archivo temporal:', err);
+    });
+
+    if (!transcription.text) {
+      return res.status(200).json({
+        success: false,
+        message: 'No se detectó habla en el audio',
+        data: { transcription: '', response: '' }
+      });
+    }
+
+    console.log('📝 Texto transcrito:', transcription.text);
+
+    // Paso 2: Enviar texto transcrito al chatbot
+    const openAIService = require('../services/openAIService');
+    const httpAdapter = new EventEmitter();
+    let fullResponse = '';
+
+    httpAdapter.on('ai_chunk', (data) => {
+      fullResponse += data.chunk;
+    });
+
+    await openAIService.completion(session_id, transcription.text, httpAdapter);
+
+    res.status(200).json({
+      success: true,
+      message: 'Audio procesado y respuesta generada',
+      data: {
+        transcription: transcription.text,
+        response: fullResponse,
+        session_id: session_id
+      }
+    });
+  } catch (error) {
+    if (req.file && fs.existsSync(req.file.path)) {
+      fs.unlink(req.file.path, () => { });
+    }
     next(error);
   }
 });
