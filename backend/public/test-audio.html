@@ -23,7 +23,7 @@
         }
 
         .container {
-            max-width: 700px;
+            max-width: 750px;
             width: 100%;
         }
 
@@ -123,6 +123,18 @@
             }
         }
 
+        @keyframes blink {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0;
+            }
+        }
+
         .status {
             padding: 8px 16px;
             border-radius: 6px;
@@ -150,6 +162,11 @@
             color: #fdba74;
         }
 
+        .status.streaming {
+            background: #3b0764;
+            color: #d8b4fe;
+        }
+
         .result {
             background: #0f172a;
             border: 1px solid #334155;
@@ -168,16 +185,18 @@
             font-size: 0.8rem;
             color: #64748b;
             margin-bottom: 4px;
+            margin-top: 12px;
         }
 
         .transcription {
             color: #fbbf24;
-            font-size: 1.1rem;
+            font-size: 1.05rem;
             font-weight: 600;
             padding: 12px;
             background: #1a1a2e;
             border-radius: 8px;
             margin-top: 8px;
+            min-height: 20px;
         }
 
         .ai-response {
@@ -187,10 +206,23 @@
             border-radius: 8px;
             margin-top: 8px;
             line-height: 1.6;
+            font-size: 1rem;
+            min-height: 20px;
+        }
+
+        .ai-response .cursor {
+            display: inline-block;
+            width: 2px;
+            height: 1em;
+            background: #34d399;
+            margin-left: 2px;
+            animation: blink 0.7s infinite;
+            vertical-align: text-bottom;
         }
 
         select,
-        input[type="text"] {
+        input[type="text"],
+        textarea {
             padding: 8px 12px;
             border-radius: 6px;
             border: 1px solid #475569;
@@ -198,6 +230,13 @@
             color: #e2e8f0;
             font-size: 0.9rem;
             margin-bottom: 8px;
+            font-family: inherit;
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 60px;
+            width: 100%;
         }
 
         .row {
@@ -216,14 +255,20 @@
         hr {
             border: none;
             border-top: 1px solid #334155;
-            margin: 20px 0;
+            margin: 16px 0;
+        }
+
+        .log-entry {
+            color: #64748b;
+            font-size: 0.8rem;
+            font-style: italic;
         }
     </style>
 </head>
 
 <body>
     <div class="container">
-        <h1>🎙️ Test de Audio — Chatbot Ganadero</h1>
+        <h1>🎙️ Test Chatbot Ganadero — Streaming</h1>
 
         <!-- Configuración -->
         <div class="card">
@@ -238,11 +283,23 @@
             </div>
         </div>
 
-        <!-- Modo HTTP -->
+        <!-- Modo Texto -->
         <div class="card">
-            <h2>📡 Modo HTTP (Postman-like)</h2>
+            <h2>💬 Chat por Texto (SSE Stream)</h2>
+            <textarea id="textMessage"
+                placeholder="Escribe tu mensaje aquí...">¿Cómo registro un nuevo animal?</textarea>
+            <div class="btn-group">
+                <button class="btn-chat" id="btnSendText" onclick="sendTextMessage()">
+                    🚀 Enviar Mensaje (Stream)
+                </button>
+            </div>
+        </div>
+
+        <!-- Modo Audio -->
+        <div class="card">
+            <h2>🎙️ Chat por Audio (SSE Stream)</h2>
             <p style="font-size:0.85rem; color:#64748b; margin-bottom:12px;">
-                Graba audio → se envía como archivo al servidor → recibes la respuesta.
+                Graba audio → se transcribe → la respuesta IA llega en streaming.
             </p>
 
             <div id="httpStatus" class="status info">Listo para grabar</div>
@@ -258,27 +315,29 @@
 
             <div class="btn-group">
                 <button class="btn-send" id="btnTranscribe" onclick="sendAudio('audio')" disabled>
-                    📝 Solo Transcribir (/audio)
+                    📝 Solo Transcribir
                 </button>
                 <button class="btn-chat" id="btnAudioChat" onclick="sendAudio('audio-chat')" disabled>
-                    🤖 Transcribir + Chat (/audio-chat)
+                    🤖 Transcribir + Chat (Stream)
                 </button>
             </div>
-
-            <div id="httpResult"></div>
         </div>
 
-        <!-- Resultado -->
+        <!-- Resultado con streaming -->
         <div class="card" id="resultCard" style="display:none">
             <h2>📋 Resultado</h2>
-            <div class="label">Transcripción:</div>
-            <div class="transcription" id="transcriptionText">—</div>
-            <div class="label" style="margin-top:12px;" id="aiLabel" style="display:none">Respuesta IA:</div>
-            <div class="ai-response" id="aiResponseText" style="display:none">—</div>
+
+            <div class="label" id="transcriptionLabel" style="display:none">📝 Transcripción:</div>
+            <div class="transcription" id="transcriptionText" style="display:none"></div>
+
+            <div class="label">🤖 Respuesta IA:</div>
+            <div class="ai-response" id="aiResponseText">—</div>
+
+            <div id="logContainer"></div>
 
             <hr>
-            <div class="label">Respuesta JSON completa:</div>
-            <div class="result" id="jsonResult">{}</div>
+            <div class="label">📡 Eventos SSE (raw):</div>
+            <div class="result" id="rawEvents"></div>
         </div>
     </div>
 
@@ -287,9 +346,40 @@
         let audioChunks = [];
         let audioBlob = null;
 
-        // ==================
+        // ==========================================
+        // ENVÍO DE TEXTO CON SSE STREAMING
+        // ==========================================
+        async function sendTextMessage() {
+            const message = document.getElementById('textMessage').value.trim();
+            if (!message) return;
+
+            const serverUrl = document.getElementById('serverUrl').value;
+            const sessionId = document.getElementById('sessionId').value;
+
+            // Preparar UI
+            showResultCard();
+            document.getElementById('transcriptionLabel').style.display = 'none';
+            document.getElementById('transcriptionText').style.display = 'none';
+            document.getElementById('btnSendText').disabled = true;
+
+            try {
+                const response = await fetch(`${serverUrl}/chatbot/message`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message, session_id: sessionId })
+                });
+
+                await readSSEStream(response);
+            } catch (err) {
+                appendRawEvent(`ERROR: ${err.message}`);
+            } finally {
+                document.getElementById('btnSendText').disabled = false;
+            }
+        }
+
+        // ==========================================
         // GRABACIÓN DE AUDIO
-        // ==================
+        // ==========================================
         async function startRecording() {
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -330,9 +420,9 @@
             document.getElementById('btnStopRecord').disabled = true;
         }
 
-        // ==================
-        // ENVÍO HTTP
-        // ==================
+        // ==========================================
+        // ENVÍO DE AUDIO
+        // ==========================================
         async function sendAudio(endpoint) {
             if (!audioBlob) {
                 setStatus('httpStatus', '⚠️ Primero graba un audio', 'error');
@@ -342,6 +432,7 @@
             const serverUrl = document.getElementById('serverUrl').value;
             const sessionId = document.getElementById('sessionId').value;
 
+            showResultCard();
             setStatus('httpStatus', '⏳ Enviando audio al servidor...', 'info');
             document.getElementById('btnTranscribe').disabled = true;
             document.getElementById('btnAudioChat').disabled = true;
@@ -349,67 +440,147 @@
             try {
                 const formData = new FormData();
                 formData.append('audio', audioBlob, 'recording.webm');
-                if (endpoint === 'audio-chat') {
-                    formData.append('session_id', sessionId);
-                }
+                formData.append('session_id', sessionId);
 
-                const startTime = Date.now();
                 const response = await fetch(`${serverUrl}/chatbot/${endpoint}`, {
                     method: 'POST',
                     body: formData
                 });
 
-                const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-
-                // Leer como texto primero para evitar error de parsing
-                const responseText = await response.text();
-                let data;
-                try {
-                    data = JSON.parse(responseText);
-                } catch (parseErr) {
-                    // El servidor devolvió algo que no es JSON (probablemente HTML de error)
-                    setStatus('httpStatus', `❌ Error del servidor (${response.status}): ${responseText.substring(0, 200)}`, 'error');
-                    return;
+                if (endpoint === 'audio') {
+                    // /audio no hace streaming, devuelve JSON
+                    const responseText = await response.text();
+                    let data;
+                    try {
+                        data = JSON.parse(responseText);
+                    } catch (e) {
+                        setStatus('httpStatus', `❌ Error: ${responseText.substring(0, 200)}`, 'error');
+                        return;
+                    }
+                    document.getElementById('transcriptionLabel').style.display = 'block';
+                    document.getElementById('transcriptionText').style.display = 'block';
+                    document.getElementById('transcriptionText').textContent = data.data?.text || '—';
+                    document.getElementById('aiResponseText').textContent = '(Solo transcripción, sin chat)';
+                    appendRawEvent(JSON.stringify(data, null, 2));
+                    setStatus('httpStatus', '✅ Transcripción completada', 'success');
+                } else {
+                    // /audio-chat hace streaming SSE
+                    setStatus('httpStatus', '📡 Recibiendo stream...', 'streaming');
+                    await readSSEStream(response);
+                    setStatus('httpStatus', '✅ Stream completado', 'success');
                 }
-
-                if (!response.ok || !data.success) {
-                    setStatus('httpStatus', `❌ Error: ${data.message || 'Error desconocido'}`, 'error');
-                    showResult(data, endpoint);
-                    return;
-                }
-
-                setStatus('httpStatus', `✅ Respuesta en ${elapsed}s`, 'success');
-                showResult(data, endpoint);
             } catch (err) {
-                setStatus('httpStatus', '❌ Error de conexión: ' + err.message, 'error');
+                setStatus('httpStatus', '❌ Error: ' + err.message, 'error');
             } finally {
                 document.getElementById('btnTranscribe').disabled = false;
                 document.getElementById('btnAudioChat').disabled = false;
             }
         }
 
-        // ==================
-        // MOSTRAR RESULTADOS
-        // ==================
-        function showResult(data, endpoint) {
-            document.getElementById('resultCard').style.display = 'block';
+        // ==========================================
+        // LECTOR DE SSE STREAM (el corazón)
+        // ==========================================
+        async function readSSEStream(response) {
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            const aiEl = document.getElementById('aiResponseText');
+            let fullText = '';
+            let buffer = '';
 
-            const transcription = data.data?.text || data.data?.transcription || '—';
-            document.getElementById('transcriptionText').textContent = transcription;
+            // Iniciar con cursor parpadeante
+            aiEl.innerHTML = '<span class="cursor"></span>';
 
-            const aiLabel = document.getElementById('aiLabel');
-            const aiText = document.getElementById('aiResponseText');
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
 
-            if (endpoint === 'audio-chat' && data.data?.response) {
-                aiLabel.style.display = 'block';
-                aiText.style.display = 'block';
-                aiText.textContent = data.data.response;
-            } else {
-                aiLabel.style.display = 'none';
-                aiText.style.display = 'none';
+                buffer += decoder.decode(value, { stream: true });
+
+                // Procesar líneas completas del buffer
+                const lines = buffer.split('\n');
+                // Guardar la última línea incompleta en el buffer
+                buffer = lines.pop();
+
+                for (const line of lines) {
+                    if (!line.startsWith('data: ')) continue;
+
+                    const raw = line.substring(6); // quitar "data: "
+                    appendRawEvent(raw);
+
+                    if (raw === '[DONE]') {
+                        // Quitar cursor
+                        aiEl.innerHTML = fullText;
+                        appendRawEvent('--- FIN DEL STREAM ---');
+                        return;
+                    }
+
+                    try {
+                        const parsed = JSON.parse(raw);
+
+                        switch (parsed.event) {
+                            case 'ai_chunk':
+                                fullText += parsed.chunk;
+                                aiEl.innerHTML = fullText + '<span class="cursor"></span>';
+                                // Auto-scroll
+                                aiEl.scrollTop = aiEl.scrollHeight;
+                                break;
+
+                            case 'ai_end':
+                                // Respuesta completa recibida
+                                fullText = parsed.fullResponse;
+                                aiEl.innerHTML = fullText;
+                                break;
+
+                            case 'transcription':
+                                // Evento de transcripción (solo audio-chat)
+                                document.getElementById('transcriptionLabel').style.display = 'block';
+                                document.getElementById('transcriptionText').style.display = 'block';
+                                document.getElementById('transcriptionText').textContent = parsed.text;
+                                break;
+
+                            case 'ai_log':
+                                appendLog(parsed.message);
+                                break;
+
+                            case 'error':
+                                fullText += `\n❌ Error: ${parsed.error}`;
+                                aiEl.innerHTML = fullText;
+                                break;
+                        }
+                    } catch (e) {
+                        // JSON inválido, ignorar
+                    }
+                }
             }
 
-            document.getElementById('jsonResult').textContent = JSON.stringify(data, null, 2);
+            // Si terminamos sin [DONE], quitar cursor
+            aiEl.innerHTML = fullText || '(sin respuesta)';
+        }
+
+        // ==========================================
+        // HELPERS DE UI
+        // ==========================================
+        function showResultCard() {
+            document.getElementById('resultCard').style.display = 'block';
+            document.getElementById('aiResponseText').innerHTML = '';
+            document.getElementById('rawEvents').textContent = '';
+            document.getElementById('logContainer').innerHTML = '';
+            document.getElementById('transcriptionLabel').style.display = 'none';
+            document.getElementById('transcriptionText').style.display = 'none';
+        }
+
+        function appendRawEvent(text) {
+            const el = document.getElementById('rawEvents');
+            el.textContent += text + '\n';
+            el.scrollTop = el.scrollHeight;
+        }
+
+        function appendLog(message) {
+            const container = document.getElementById('logContainer');
+            const p = document.createElement('p');
+            p.className = 'log-entry';
+            p.textContent = `🔧 ${message}`;
+            container.appendChild(p);
         }
 
         function setStatus(elementId, message, type) {

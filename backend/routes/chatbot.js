@@ -35,40 +35,56 @@ const upload = multer({
  * Gestión de interacciones con el chatbot de la plataforma ganadera
  */
 
-// POST /chatbot/message - Enviar un mensaje al chatbot
+// POST /chatbot/message - Enviar un mensaje al chatbot (SSE streaming)
 router.post('/message', async function (req, res, next) {
   try {
     const { message, session_id } = req.body;
     console.log('Mensaje recibido:', message);
     console.log('Sesión ID:', session_id);
 
+    // Configurar SSE (Server-Sent Events)
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders();
+
     const openAIService = require('../services/openAIService');
+    const sseAdapter = new EventEmitter();
 
-    // Crear un adaptador HTTP que emula la interfaz de ws para capturar la respuesta
-    const httpAdapter = new EventEmitter();
-    let fullResponse = '';
-
-    // emitEvent() en openAIService usa ws.emit() si no tiene ws.send()
-    // Capturamos los eventos emitidos
-    httpAdapter.on('ai_chunk', (data) => {
-      fullResponse += data.chunk;
+    // Cada chunk de la IA se envía inmediatamente al cliente via SSE
+    sseAdapter.on('ai_chunk', (data) => {
+      res.write(`data: ${JSON.stringify({ event: 'ai_chunk', chunk: data.chunk })}\n\n`);
     });
 
-    // Llamamos al servicio pasando el adaptador
-    await openAIService.completion(session_id, message, httpAdapter);
-
-    // Enviamos la respuesta completa al cliente HTTP
-    res.status(200).json({
-      success: true,
-      message: 'Respuesta del chatbot',
-      data: {
-        response: fullResponse,
-        session_id: session_id
-      }
+    sseAdapter.on('ai_end', (data) => {
+      res.write(`data: ${JSON.stringify({ event: 'ai_end', fullResponse: data.fullResponse })}\n\n`);
     });
+
+    sseAdapter.on('ai_log', (data) => {
+      res.write(`data: ${JSON.stringify({ event: 'ai_log', message: data.message })}\n\n`);
+    });
+
+    sseAdapter.on('remote_error', (data) => {
+      res.write(`data: ${JSON.stringify({ event: 'error', error: data.details })}\n\n`);
+    });
+
+    // Llamamos al servicio — los chunks se envían en tiempo real
+    await openAIService.completion(session_id, message, sseAdapter);
+
+    // Señal de fin de stream
+    res.write(`data: [DONE]\n\n`);
+    res.end();
 
   } catch (error) {
-    next(error);
+    // Si ya empezamos a enviar SSE, cerramos con error
+    if (res.headersSent) {
+      res.write(`data: ${JSON.stringify({ event: 'error', error: error.message })}\n\n`);
+      res.write(`data: [DONE]\n\n`);
+      res.end();
+    } else {
+      next(error);
+    }
   }
 });
 
@@ -209,7 +225,7 @@ router.post('/audio', upload.single('audio'), async function (req, res, next) {
   }
 });
 
-// POST /chatbot/audio-chat - Transcribir audio y enviarlo al chatbot en un solo paso
+// POST /chatbot/audio-chat - Transcribir audio y enviarlo al chatbot (SSE streaming)
 router.post('/audio-chat', upload.single('audio'), async function (req, res, next) {
   try {
     if (!req.file) {
@@ -240,31 +256,52 @@ router.post('/audio-chat', upload.single('audio'), async function (req, res, nex
 
     console.log('📝 Texto transcrito:', transcription.text);
 
-    // Paso 2: Enviar texto transcrito al chatbot
+    // Paso 2: Configurar SSE para streaming de la respuesta IA
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders();
+
+    // Enviar la transcripción como primer evento
+    res.write(`data: ${JSON.stringify({ event: 'transcription', text: transcription.text })}\n\n`);
+
+    // Paso 3: Streaming de la respuesta del chatbot
     const openAIService = require('../services/openAIService');
-    const httpAdapter = new EventEmitter();
-    let fullResponse = '';
+    const sseAdapter = new EventEmitter();
 
-    httpAdapter.on('ai_chunk', (data) => {
-      fullResponse += data.chunk;
+    sseAdapter.on('ai_chunk', (data) => {
+      res.write(`data: ${JSON.stringify({ event: 'ai_chunk', chunk: data.chunk })}\n\n`);
     });
 
-    await openAIService.completion(session_id, transcription.text, httpAdapter);
-
-    res.status(200).json({
-      success: true,
-      message: 'Audio procesado y respuesta generada',
-      data: {
-        transcription: transcription.text,
-        response: fullResponse,
-        session_id: session_id
-      }
+    sseAdapter.on('ai_end', (data) => {
+      res.write(`data: ${JSON.stringify({ event: 'ai_end', fullResponse: data.fullResponse })}\n\n`);
     });
+
+    sseAdapter.on('ai_log', (data) => {
+      res.write(`data: ${JSON.stringify({ event: 'ai_log', message: data.message })}\n\n`);
+    });
+
+    sseAdapter.on('remote_error', (data) => {
+      res.write(`data: ${JSON.stringify({ event: 'error', error: data.details })}\n\n`);
+    });
+
+    await openAIService.completion(session_id, transcription.text, sseAdapter);
+
+    res.write(`data: [DONE]\n\n`);
+    res.end();
+
   } catch (error) {
     if (req.file && fs.existsSync(req.file.path)) {
       fs.unlink(req.file.path, () => { });
     }
-    next(error);
+    if (res.headersSent) {
+      res.write(`data: ${JSON.stringify({ event: 'error', error: error.message })}\n\n`);
+      res.write(`data: [DONE]\n\n`);
+      res.end();
+    } else {
+      next(error);
+    }
   }
 });
 
