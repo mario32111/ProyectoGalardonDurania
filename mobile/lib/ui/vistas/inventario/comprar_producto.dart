@@ -1,13 +1,91 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // <--- Importamos Firebase
 
-class VistaComprarProducto extends StatelessWidget {
+class VistaComprarProducto extends StatefulWidget {
   const VistaComprarProducto({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    // Usamos Naranja para identificar INVENTARIO
-    final Color naranjaInventario = const Color(0xFFEF6C00);
+  State<VistaComprarProducto> createState() => _VistaComprarProductoState();
+}
 
+class _VistaComprarProductoState extends State<VistaComprarProducto> {
+  final Color naranjaInventario = const Color(0xFFEF6C00);
+
+  // --- CONTROLADORES ---
+  final TextEditingController _nombreController = TextEditingController();
+  final TextEditingController _proveedorController = TextEditingController();
+  final TextEditingController _cantidadController = TextEditingController();
+  final TextEditingController _costoController = TextEditingController();
+
+  // --- VARIABLES PARA LOS MENÚS DESPLEGABLES ---
+  String? _categoriaSeleccionada;
+  String? _unidadSeleccionada;
+
+  // --- VARIABLE PARA EL CÁLCULO TOTAL ---
+  double _costoTotal = 0.0;
+
+  // --- FUNCIÓN PARA CALCULAR EL TOTAL EN TIEMPO REAL ---
+  void _calcularTotal() {
+    double cantidad = double.tryParse(_cantidadController.text.trim()) ?? 0.0;
+    double costo = double.tryParse(_costoController.text.trim()) ?? 0.0;
+    
+    setState(() {
+      _costoTotal = cantidad * costo;
+    });
+  }
+
+  // --- FUNCIÓN QUE MANDA LOS DATOS A FIREBASE ---
+  Future<void> _guardarEnInventario() async {
+    // 1. Validamos que no falten datos clave
+    if (_nombreController.text.trim().isEmpty || _cantidadController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Por favor llena el nombre y la cantidad'), backgroundColor: Colors.red),
+      );
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Agregando al inventario...')),
+    );
+
+    try {
+      // 2. Guardamos en la colección 'inventario' (La que lee tu pantalla de Stock)
+      await FirebaseFirestore.instance.collection('inventario').add({
+        'nombre': _nombreController.text.trim(),
+        'categoria': _categoriaSeleccionada ?? 'Sin categoría',
+        'proveedor': _proveedorController.text.trim(),
+        'cantidad_actual': double.tryParse(_cantidadController.text.trim()) ?? 0.0,
+        'capacidad_maxima': 1000.0, // Un valor por defecto para que la barra gráfica funcione
+        'unidad': _unidadSeleccionada ?? 'Und',
+        'costo_unitario': double.tryParse(_costoController.text.trim()) ?? 0.0,
+        'costo_total_compra': _costoTotal,
+        'fecha_ingreso': FieldValue.serverTimestamp(),
+      });
+
+      // 3. Limpiamos el formulario
+      _nombreController.clear();
+      _proveedorController.clear();
+      _cantidadController.clear();
+      _costoController.clear();
+      
+      setState(() {
+        _costoTotal = 0.0;
+        _categoriaSeleccionada = null;
+        _unidadSeleccionada = null;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('¡Producto agregado al stock con éxito!'), backgroundColor: Colors.green),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error al guardar: $e'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
       body: SingleChildScrollView(
@@ -46,17 +124,24 @@ class VistaComprarProducto extends StatelessWidget {
               decoration: _decoracionTarjeta(),
               child: Column(
                 children: [
-                  _campoTexto("Nombre del Producto", Icons.label_outline, TextInputType.text),
+                  _campoTexto("Nombre del Producto", Icons.label_outline, TextInputType.text, _nombreController),
                   const SizedBox(height: 15),
-                  // Simulamos un Dropdown para Categoría
+                  
+                  // Dropdown REAL para Categoría
                   DropdownButtonFormField<String>(
+                    value: _categoriaSeleccionada,
                     decoration: _inputDecoration("Categoría", Icons.category),
                     items: ["Alimento / Grano", "Medicina / Vacuna", "Equipo / Herramienta"]
                         .map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
-                    onChanged: (val) {},
+                    onChanged: (val) {
+                      setState(() {
+                        _categoriaSeleccionada = val;
+                      });
+                    },
                   ),
+                  
                   const SizedBox(height: 15),
-                  _campoTexto("Proveedor", Icons.storefront, TextInputType.text),
+                  _campoTexto("Proveedor", Icons.storefront, TextInputType.text, _proveedorController),
                 ],
               ),
             ),
@@ -72,21 +157,26 @@ class VistaComprarProducto extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      Expanded(child: _campoTexto("Cantidad", Icons.format_list_numbered, TextInputType.number)),
+                      Expanded(child: _campoTexto("Cantidad", Icons.format_list_numbered, const TextInputType.numberWithOptions(decimal: true), _cantidadController, alCambiar: (_) => _calcularTotal())),
                       const SizedBox(width: 15),
                       Expanded(
-                        // Dropdown pequeño para la unidad
+                        // Dropdown REAL para la Unidad
                         child: DropdownButtonFormField<String>(
+                          value: _unidadSeleccionada,
                           decoration: _inputDecoration("Unidad", Icons.straighten),
                           items: ["Kg", "Litros", "Dosis", "Sacos", "Piezas"]
                               .map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
-                          onChanged: (val) {},
+                          onChanged: (val) {
+                            setState(() {
+                              _unidadSeleccionada = val;
+                            });
+                          },
                         ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 15),
-                  _campoTexto("Costo Unitario (\$)", Icons.attach_money, TextInputType.number),
+                  _campoTexto("Costo Unitario (\$)", Icons.attach_money, const TextInputType.numberWithOptions(decimal: true), _costoController, alCambiar: (_) => _calcularTotal()),
                   
                   const SizedBox(height: 25),
                   const Divider(),
@@ -98,7 +188,7 @@ class VistaComprarProducto extends StatelessWidget {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         const Text("COSTO TOTAL:", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
-                        Text("\$ 0.00", style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: naranjaInventario)),
+                        Text("\$ ${_costoTotal.toStringAsFixed(2)}", style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: naranjaInventario)),
                       ],
                     ),
                   ),
@@ -118,7 +208,7 @@ class VistaComprarProducto extends StatelessWidget {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   elevation: 5,
                 ),
-                onPressed: () {}, 
+                onPressed: _guardarEnInventario, // <--- Conectado a Firebase
                 icon: const Icon(Icons.add_shopping_cart, color: Colors.white, size: 28),
                 label: const Text("AGREGAR AL INVENTARIO", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
               ),
@@ -149,15 +239,16 @@ class VistaComprarProducto extends StatelessWidget {
     );
   }
 
-  // Widget para texto normal
-  Widget _campoTexto(String label, IconData icono, TextInputType tipo) {
+  // Modificado para aceptar controladores y onChanged
+  Widget _campoTexto(String label, IconData icono, TextInputType tipo, TextEditingController controlador, {Function(String)? alCambiar}) {
     return TextField(
+      controller: controlador,
       keyboardType: tipo,
+      onChanged: alCambiar,
       decoration: _inputDecoration(label, icono),
     );
   }
 
-  // Estilo compartido para TextFields y Dropdowns
   InputDecoration _inputDecoration(String label, IconData icono) {
     return InputDecoration(
       labelText: label,

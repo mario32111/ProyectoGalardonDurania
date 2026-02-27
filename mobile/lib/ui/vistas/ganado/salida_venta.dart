@@ -1,13 +1,88 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // <--- Importamos Firebase
 
-class VistaSalidaVenta extends StatelessWidget {
+class VistaSalidaVenta extends StatefulWidget {
   const VistaSalidaVenta({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    // Definimos el color aquí adentro para usarlo en la UI
-    final Color verdeVenta = const Color(0xFF2E7D32);
+  State<VistaSalidaVenta> createState() => _VistaSalidaVentaState();
+}
 
+class _VistaSalidaVentaState extends State<VistaSalidaVenta> {
+  final Color verdeVenta = const Color(0xFF2E7D32);
+
+  // --- CONTROLADORES: Para atrapar lo que escribes ---
+  final TextEditingController _clienteController = TextEditingController();
+  final TextEditingController _destinoController = TextEditingController();
+  final TextEditingController _fechaController = TextEditingController();
+  final TextEditingController _cabezasController = TextEditingController();
+  final TextEditingController _pesoController = TextEditingController();
+  final TextEditingController _precioController = TextEditingController();
+
+  // Variable para guardar el cálculo automático del total
+  double _montoTotal = 0.0;
+
+  // --- FUNCIÓN PARA CALCULAR EL TOTAL EN TIEMPO REAL ---
+  void _calcularTotal() {
+    double peso = double.tryParse(_pesoController.text.trim()) ?? 0.0;
+    double precio = double.tryParse(_precioController.text.trim()) ?? 0.0;
+    
+    setState(() {
+      _montoTotal = peso * precio;
+    });
+  }
+
+  // --- FUNCIÓN QUE MANDA LOS DATOS A FIREBASE ---
+  Future<void> _guardarVenta() async {
+    // 1. Validamos que no envíen datos vacíos importantes
+    if (_clienteController.text.trim().isEmpty || _pesoController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Falta el cliente o el peso de la venta'), backgroundColor: Colors.red),
+      );
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Registrando venta en la nube...')),
+    );
+
+    try {
+      // 2. Enviamos todo a una colección llamada 'ventas_salidas'
+      await FirebaseFirestore.instance.collection('ventas_salidas').add({
+        'cliente': _clienteController.text.trim(),
+        'destino': _destinoController.text.trim(),
+        'fecha_salida': _fechaController.text.trim(),
+        'cantidad_cabezas': int.tryParse(_cabezasController.text.trim()) ?? 0,
+        'peso_total_kg': double.tryParse(_pesoController.text.trim()) ?? 0.0,
+        'precio_venta_kg': double.tryParse(_precioController.text.trim()) ?? 0.0,
+        'monto_total': _montoTotal,
+        'fecha_registro_sistema': FieldValue.serverTimestamp(),
+      });
+
+      // 3. Limpiamos las cajas y reseteamos el total
+      _clienteController.clear();
+      _destinoController.clear();
+      _fechaController.clear();
+      _cabezasController.clear();
+      _pesoController.clear();
+      _precioController.clear();
+      
+      setState(() {
+        _montoTotal = 0.0;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('¡Venta registrada con éxito!'), backgroundColor: Colors.green),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error al guardar: $e'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
       body: SingleChildScrollView(
@@ -46,11 +121,11 @@ class VistaSalidaVenta extends StatelessWidget {
               decoration: _decoracionTarjeta(),
               child: Column(
                 children: [
-                  _campoTexto("Cliente / Comprador", Icons.person_outline, TextInputType.text),
+                  _campoTexto("Cliente / Comprador", Icons.person_outline, TextInputType.text, _clienteController),
                   const SizedBox(height: 15),
-                  _campoTexto("Destino (Rastro/Engorda)", Icons.local_shipping_outlined, TextInputType.text),
+                  _campoTexto("Destino (Rastro/Engorda)", Icons.local_shipping_outlined, TextInputType.text, _destinoController),
                   const SizedBox(height: 15),
-                  _campoTexto("Fecha de Salida", Icons.calendar_today, TextInputType.datetime),
+                  _campoTexto("Fecha de Salida", Icons.calendar_today, TextInputType.datetime, _fechaController),
                 ],
               ),
             ),
@@ -66,13 +141,13 @@ class VistaSalidaVenta extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      Expanded(child: _campoTexto("Cabezas", Icons.pets, TextInputType.number)),
+                      Expanded(child: _campoTexto("Cabezas", Icons.pets, TextInputType.number, _cabezasController)),
                       const SizedBox(width: 15),
-                      Expanded(child: _campoTexto("Peso Total (Kg)", Icons.scale, TextInputType.number)),
+                      Expanded(child: _campoTexto("Peso Total (Kg)", Icons.scale, const TextInputType.numberWithOptions(decimal: true), _pesoController, alCambiar: (_) => _calcularTotal())),
                     ],
                   ),
                   const SizedBox(height: 15),
-                  _campoTexto("Precio Venta por Kg (\$)", Icons.price_check, TextInputType.number),
+                  _campoTexto("Precio Venta por Kg (\$)", Icons.price_check, const TextInputType.numberWithOptions(decimal: true), _precioController, alCambiar: (_) => _calcularTotal()),
                   
                   const SizedBox(height: 25),
                   const Divider(),
@@ -83,7 +158,7 @@ class VistaSalidaVenta extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       const Text("MONTO TOTAL:", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
-                      Text("\$ 0.00", style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: verdeVenta)),
+                      Text("\$ ${_montoTotal.toStringAsFixed(2)}", style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: verdeVenta)),
                     ],
                   ),
                 ],
@@ -102,9 +177,8 @@ class VistaSalidaVenta extends StatelessWidget {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   elevation: 5,
                 ),
-                onPressed: () {}, 
+                onPressed: _guardarVenta, // <--- Conectado a Firebase
                 icon: const Icon(Icons.check_circle_outline, color: Colors.white, size: 28),
-                // ⚠️ AQUÍ ESTABA EL ERROR: Cambiamos 'child' por 'label'
                 label: const Text("FINALIZAR VENTA", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
               ),
             ),
@@ -134,9 +208,12 @@ class VistaSalidaVenta extends StatelessWidget {
     );
   }
 
-  Widget _campoTexto(String label, IconData icono, TextInputType tipo) {
+  // Modificado para aceptar controladores y detectar cambios (onChanged)
+  Widget _campoTexto(String label, IconData icono, TextInputType tipo, TextEditingController controlador, {Function(String)? alCambiar}) {
     return TextField(
+      controller: controlador,
       keyboardType: tipo,
+      onChanged: alCambiar, // Permite ejecutar funciones al escribir
       decoration: InputDecoration(
         labelText: label,
         prefixIcon: Icon(icono, color: Colors.grey),
@@ -147,5 +224,4 @@ class VistaSalidaVenta extends StatelessWidget {
       ),
     );
   }
-
 }

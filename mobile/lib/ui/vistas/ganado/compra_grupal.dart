@@ -1,14 +1,90 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // <--- Importamos Firebase
 
-class VistaCompraGrupal extends StatelessWidget {
+class VistaCompraGrupal extends StatefulWidget {
   const VistaCompraGrupal({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final Color azulAgro = const Color(0xFF01579B);
+  State<VistaCompraGrupal> createState() => _VistaCompraGrupalState();
+}
 
+class _VistaCompraGrupalState extends State<VistaCompraGrupal> {
+  final Color azulAgro = const Color(0xFF01579B);
+
+  // --- CONTROLADORES: Para atrapar lo que escribes ---
+  final TextEditingController _proveedorController = TextEditingController();
+  final TextEditingController _origenController = TextEditingController();
+  final TextEditingController _fechaController = TextEditingController();
+  final TextEditingController _cabezasController = TextEditingController();
+  final TextEditingController _pesoController = TextEditingController();
+  final TextEditingController _precioController = TextEditingController();
+
+  // Variable para guardar el cálculo automático del total
+  double _totalEstimado = 0.0;
+
+  // --- FUNCIÓN PARA CALCULAR EL TOTAL EN TIEMPO REAL ---
+  void _calcularTotal() {
+    double peso = double.tryParse(_pesoController.text.trim()) ?? 0.0;
+    double precio = double.tryParse(_precioController.text.trim()) ?? 0.0;
+    
+    setState(() {
+      _totalEstimado = peso * precio;
+    });
+  }
+
+  // --- FUNCIÓN QUE MANDA LOS DATOS A FIREBASE ---
+  Future<void> _guardarCompra() async {
+    // 1. Validamos que no envíen datos vacíos importantes
+    if (_proveedorController.text.trim().isEmpty || _cabezasController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Falta el proveedor o la cantidad de cabezas'), backgroundColor: Colors.red),
+      );
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Registrando lote en la nube...')),
+    );
+
+    try {
+      // 2. Enviamos todo a una colección llamada 'compras_lotes'
+      await FirebaseFirestore.instance.collection('compras_lotes').add({
+        'proveedor': _proveedorController.text.trim(),
+        'origen': _origenController.text.trim(),
+        'fecha_indicada': _fechaController.text.trim(),
+        'cantidad_cabezas': int.tryParse(_cabezasController.text.trim()) ?? 0,
+        'peso_total_kg': double.tryParse(_pesoController.text.trim()) ?? 0.0,
+        'precio_por_kilo': double.tryParse(_precioController.text.trim()) ?? 0.0,
+        'total_pagado': _totalEstimado,
+        'fecha_registro_sistema': FieldValue.serverTimestamp(),
+      });
+
+      // 3. Limpiamos las cajas y reseteamos el total
+      _proveedorController.clear();
+      _origenController.clear();
+      _fechaController.clear();
+      _cabezasController.clear();
+      _pesoController.clear();
+      _precioController.clear();
+      
+      setState(() {
+        _totalEstimado = 0.0;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('¡Compra grupal registrada con éxito!'), backgroundColor: Colors.green),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error al guardar: $e'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F7FA), // Fondo gris suave moderno
+      backgroundColor: const Color(0xFFF5F7FA),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(25),
         child: Column(
@@ -42,11 +118,11 @@ class VistaCompraGrupal extends StatelessWidget {
               decoration: _cardDecoration(),
               child: Column(
                 children: [
-                  _campoTexto("Nombre del Proveedor", Icons.store, TextInputType.text),
+                  _campoTexto("Nombre del Proveedor", Icons.store, TextInputType.text, _proveedorController),
                   const SizedBox(height: 15),
-                  _campoTexto("Lugar de Origen (Rancho/Ciudad)", Icons.map, TextInputType.text),
+                  _campoTexto("Lugar de Origen (Rancho/Ciudad)", Icons.map, TextInputType.text, _origenController),
                   const SizedBox(height: 15),
-                  _campoTexto("Fecha de Compra", Icons.calendar_today, TextInputType.datetime),
+                  _campoTexto("Fecha de Compra", Icons.calendar_today, TextInputType.datetime, _fechaController),
                 ],
               ),
             ),
@@ -62,16 +138,18 @@ class VistaCompraGrupal extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      Expanded(child: _campoTexto("Cant. Cabezas", Icons.pets, TextInputType.number)),
+                      Expanded(child: _campoTexto("Cant. Cabezas", Icons.pets, TextInputType.number, _cabezasController)),
                       const SizedBox(width: 15),
-                      Expanded(child: _campoTexto("Peso Total (Kg)", Icons.monitor_weight, TextInputType.number)),
+                      // Al escribir en peso, calculamos el total
+                      Expanded(child: _campoTexto("Peso Total (Kg)", Icons.monitor_weight, const TextInputType.numberWithOptions(decimal: true), _pesoController, alCambiar: (_) => _calcularTotal())),
                     ],
                   ),
                   const SizedBox(height: 15),
-                  _campoTexto("Precio Pactado por Kilo (\$)", Icons.attach_money, TextInputType.number),
+                  // Al escribir en precio, calculamos el total
+                  _campoTexto("Precio Pactado por Kilo (\$)", Icons.attach_money, const TextInputType.numberWithOptions(decimal: true), _precioController, alCambiar: (_) => _calcularTotal()),
                   
                   const SizedBox(height: 20),
-                  // Pequeña alerta visual o resumen
+                  // Resumen dinámico del total
                   Container(
                     padding: const EdgeInsets.all(15),
                     decoration: BoxDecoration(color: Colors.blueGrey[50], borderRadius: BorderRadius.circular(10)),
@@ -79,7 +157,7 @@ class VistaCompraGrupal extends StatelessWidget {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         const Text("Total Estimado a Pagar:", style: TextStyle(fontWeight: FontWeight.bold)),
-                        Text("\$ 0.00", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: azulAgro)),
+                        Text("\$ ${_totalEstimado.toStringAsFixed(2)}", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: azulAgro)),
                       ],
                     ),
                   )
@@ -99,7 +177,7 @@ class VistaCompraGrupal extends StatelessWidget {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   elevation: 5,
                 ),
-                onPressed: () {}, 
+                onPressed: _guardarCompra, // <--- Conectado a Firebase
                 icon: const Icon(Icons.save, color: Colors.white),
                 label: const Text("REGISTRAR COMPRA", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold))
               ),
@@ -111,7 +189,7 @@ class VistaCompraGrupal extends StatelessWidget {
     );
   }
 
-  // --- WIDGETS AUXILIARES (Para no repetir código) ---
+  // --- WIDGETS AUXILIARES ---
 
   Widget _buildSectionTitle(String titulo) {
     return Padding(
@@ -128,14 +206,17 @@ class VistaCompraGrupal extends StatelessWidget {
     );
   }
 
-  Widget _campoTexto(String label, IconData icono, TextInputType tipo) {
+  // Modificado para aceptar controladores y detectar cambios (onChanged)
+  Widget _campoTexto(String label, IconData icono, TextInputType tipo, TextEditingController controlador, {Function(String)? alCambiar}) {
     return TextField(
+      controller: controlador,
       keyboardType: tipo,
+      onChanged: alCambiar, // Permite ejecutar funciones al escribir
       decoration: InputDecoration(
         labelText: label,
         prefixIcon: Icon(icono, color: Colors.grey),
         filled: true,
-        fillColor: const Color(0xFFF8FAFC), // Fondo muy clarito en el input
+        fillColor: const Color(0xFFF8FAFC),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
         contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
       ),
