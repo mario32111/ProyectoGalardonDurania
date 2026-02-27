@@ -1,12 +1,31 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // <--- Importamos Firebase
 
-class VistaStockAlimentos extends StatelessWidget {
+class VistaStockAlimentos extends StatefulWidget {
   const VistaStockAlimentos({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final Color naranjaInventario = const Color(0xFFEF6C00);
+  State<VistaStockAlimentos> createState() => _VistaStockAlimentosState();
+}
 
+class _VistaStockAlimentosState extends State<VistaStockAlimentos> {
+  final Color naranjaInventario = const Color(0xFFEF6C00);
+  
+  // Controlador para atrapar lo que escribes en la barra de búsqueda
+  String _textoBusqueda = "";
+
+  // Pequeña función para ponerle un icono bonito dependiendo del nombre del insumo
+  IconData _obtenerIcono(String nombre) {
+    String n = nombre.toLowerCase();
+    if (n.contains('maiz') || n.contains('grano')) return Icons.grain;
+    if (n.contains('alfalfa') || n.contains('pasto')) return Icons.grass;
+    if (n.contains('liquido') || n.contains('agua') || n.contains('melaza')) return Icons.water_drop;
+    if (n.contains('sal') || n.contains('mineral')) return Icons.eco;
+    return Icons.inventory_2; // Icono por defecto de la caja
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
       body: SingleChildScrollView(
@@ -35,8 +54,14 @@ class VistaStockAlimentos extends StatelessWidget {
             
             const SizedBox(height: 25),
 
-            // --- BARRA DE BÚSQUEDA ---
+            // --- BARRA DE BÚSQUEDA VIVA ---
             TextField(
+              onChanged: (valor) {
+                // Cada que escribes una letra, la pantalla se actualiza para filtrar
+                setState(() {
+                  _textoBusqueda = valor.toLowerCase();
+                });
+              },
               decoration: InputDecoration(
                 hintText: "Buscar producto...",
                 prefixIcon: const Icon(Icons.search, color: Colors.grey),
@@ -47,37 +72,59 @@ class VistaStockAlimentos extends StatelessWidget {
             ),
 
             const SizedBox(height: 30),
-
-            // --- LISTA DE PRODUCTOS (CARDS INTELIGENTES) ---
             const Text("Almacén Principal", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.black54)),
             const SizedBox(height: 15),
 
-            // Item 1: Nivel Alto (Verde)
-            _itemStock(
-              "Maíz Rolado", 
-              Icons.grain, 
-              3800, 5000, "Kg" // Actual, Máximo, Unidad
-            ),
+            // --- LISTA DE PRODUCTOS CONECTADA A FIREBASE (TIEMPO REAL) ---
+            StreamBuilder<QuerySnapshot>(
+              // Apuntamos a la colección 'inventario'
+              stream: FirebaseFirestore.instance.collection('inventario').snapshots(),
+              builder: (context, snapshot) {
+                // 1. Mientras va a internet a buscar los datos
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
 
-            // Item 2: Nivel Medio (Naranja)
-            _itemStock(
-              "Alfalfa Pacas", 
-              Icons.grass, 
-              250, 500, "Pacas"
-            ),
+                // 2. Si la base de datos está vacía (¡Como pasará ahorita!)
+                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                  return Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(40.0),
+                      child: Text(
+                        "Tu inventario está vacío.\nVe a 'Comprar Producto' para agregar insumos a tu bodega.",
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.grey[500], fontSize: 16),
+                      ),
+                    ),
+                  );
+                }
 
-            // Item 3: Nivel Crítico (Rojo)
-            _itemStock(
-              "Melaza Líquida", 
-              Icons.water_drop, 
-              150, 2000, "Litros"
-            ),
+                // 3. Si hay datos, los filtramos con lo que escribiste en la búsqueda
+                var productos = snapshot.data!.docs.where((doc) {
+                  var datos = doc.data() as Map<String, dynamic>;
+                  String nombre = (datos['nombre'] ?? '').toString().toLowerCase();
+                  return nombre.contains(_textoBusqueda);
+                }).toList();
 
-            // Item 4: Otro ejemplo
-            _itemStock(
-              "Sal Mineral", 
-              Icons.eco, 
-              850, 1000, "Kg"
+                if (productos.isEmpty) {
+                  return const Center(child: Text("No se encontraron productos con ese nombre."));
+                }
+
+                // 4. Dibujamos tus tarjetas bonitas con los datos de la nube
+                return Column(
+                  children: productos.map((documento) {
+                    var datos = documento.data() as Map<String, dynamic>;
+                    
+                    return _itemStock(
+                      datos['nombre'] ?? 'Sin nombre',
+                      _obtenerIcono(datos['nombre'] ?? ''), // Le asigna icono automático
+                      (datos['cantidad_actual'] ?? 0).toDouble(),
+                      (datos['capacidad_maxima'] ?? 100).toDouble(), // Evita errores si no hay máximo
+                      datos['unidad'] ?? 'Und'
+                    );
+                  }).toList(),
+                );
+              },
             ),
           ],
         ),
@@ -85,10 +132,14 @@ class VistaStockAlimentos extends StatelessWidget {
     );
   }
 
-  // --- WIDGET PERSONALIZADO PARA CADA ITEM ---
+  // --- WIDGET PERSONALIZADO PARA CADA ITEM (INTACTO) ---
   Widget _itemStock(String nombre, IconData icono, double actual, double maximo, String unidad) {
+    // Protección de seguridad por si el máximo llega en cero desde la base de datos
+    if (maximo <= 0) maximo = 1; 
+
     // Cálculo del porcentaje (0.0 a 1.0)
     double porcentaje = actual / maximo;
+    if (porcentaje > 1.0) porcentaje = 1.0; // Evita que la barra gráfica explote si te pasas del máximo
     
     // Lógica del Semáforo
     Color colorBarra = Colors.green;
