@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class VistaDashboardInicio extends StatefulWidget {
   const VistaDashboardInicio({super.key});
@@ -16,32 +17,98 @@ class _VistaDashboardInicioState extends State<VistaDashboardInicio> {
 
   List<Map<String, dynamic>> _listaAlertas = [];
 
-  // ==============================================================================
-  //  SIMULACIÓN DE CONEXIÓN
-  // ==============================================================================
   @override
   void initState() {
     super.initState();
-    _cargarDatosBackend();
+    _cargarDatosDeLaNube(); // Ejecuta la lectura de Firebase al abrir
   }
 
-  Future<void> _cargarDatosBackend() async {
-    await Future.delayed(const Duration(seconds: 2));
+  // ==============================================================================
+  //  MOTOR DE EXTRACCIÓN DE DATOS REALES
+  // ==============================================================================
+  Future<void> _cargarDatosDeLaNube() async {
+    int contadorCabezas = 0;
+    double sumaVentas = 0.0;
+    int contadorAlertasCriticas = 0;
+    List<Map<String, dynamic>> alertasReales = [];
 
-    if (mounted) {
-      setState(() {
-        _totalCabezas = "1,240";
-        _alertasStock = "3";
-        _ventasMes = "\$450k";
+    try {
+      // 1. EXTRAER TOTAL DE GANADO
+      var ganadoObtenido = await FirebaseFirestore.instance.collection('ganado').get();
+      contadorCabezas = ganadoObtenido.docs.length;
 
-        _listaAlertas = [
-          {"titulo": "Melaza Líquida", "mensaje": "Stock Crítico (5%)", "tipo": "critico"},
-          {"titulo": "Corral 4", "mensaje": "Revisión Veterinaria pendiente", "tipo": "advertencia"},
-          {"titulo": "Vacunación", "mensaje": "Próxima campaña en 3 días", "tipo": "info"},
-        ];
+      // 2. EXTRAER TOTAL DE DINERO EN VENTAS
+      var ventasObtenidas = await FirebaseFirestore.instance.collection('ventas_salidas').get();
+      for (var doc in ventasObtenidas.docs) {
+        sumaVentas += (doc.data()['monto_total'] ?? 0.0);
+      }
 
-        _estaCargando = false;
-      });
+      // 3. REVISAR INVENTARIO (Buscando lo que se terminó o está por terminarse)
+      var inventarioObtenido = await FirebaseFirestore.instance.collection('inventario').get();
+      for (var doc in inventarioObtenido.docs) {
+        var datos = doc.data();
+        String nombreInsumo = datos['nombre'] ?? 'Producto Desconocido';
+        double actual = (datos['cantidad_actual'] ?? 0).toDouble();
+        double maxima = (datos['capacidad_maxima'] ?? 100).toDouble();
+        String unidad = datos['unidad'] ?? 'Und';
+        
+        if (maxima <= 0) maxima = 1; // Protección matemática
+        double porcentaje = actual / maxima;
+
+        // Lógica de Alertas Inteligentes
+        if (actual <= 0) {
+          // CASO 1: SE TERMINÓ EL ALIMENTO COMPLETAMENTE
+          contadorAlertasCriticas++;
+          alertasReales.add({
+            "titulo": nombreInsumo,
+            "mensaje": "¡TOTALMENTE AGOTADO! (0 $unidad)",
+            "tipo": "critico"
+          });
+        } else if (porcentaje <= 0.20) {
+          // CASO 2: ESTÁ A PUNTO DE TERMINARSE (Menos del 20%)
+          contadorAlertasCriticas++;
+          alertasReales.add({
+            "titulo": nombreInsumo,
+            "mensaje": "Nivel muy bajo, quedan solo ${actual.toInt()} $unidad",
+            "tipo": "critico"
+          });
+        } else if (porcentaje <= 0.50) {
+          // CASO 3: A LA MITAD (Se muestra la alerta pero no se cuenta como crítica)
+          alertasReales.add({
+            "titulo": nombreInsumo,
+            "mensaje": "Nivel medio al ${(porcentaje * 100).toInt()}%",
+            "tipo": "advertencia"
+          });
+        }
+      }
+
+      // Si todo está lleno, agregamos un mensaje positivo
+      if (alertasReales.isEmpty) {
+        alertasReales.add({
+          "titulo": "Inventario Sano",
+          "mensaje": "Tienes suficiente alimento y medicinas.",
+          "tipo": "info"
+        });
+      }
+
+      // 4. ACTUALIZAR LA PANTALLA
+      if (mounted) {
+        setState(() {
+          _totalCabezas = contadorCabezas.toString();
+          // Formateamos el dinero para que se vea bonito (ej. $15,000.00)
+          _ventasMes = "\$${sumaVentas.toStringAsFixed(2).replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},')}";
+          _alertasStock = contadorAlertasCriticas.toString();
+          
+          // Mostramos las primeras 5 alertas
+          _listaAlertas = alertasReales.take(5).toList(); 
+          _estaCargando = false;
+        });
+      }
+    } catch (e) {
+      debugPrint("Error al cargar dashboard: $e");
+      if (mounted) {
+        setState(() => _estaCargando = false);
+      }
     }
   }
 
@@ -55,87 +122,102 @@ class _VistaDashboardInicioState extends State<VistaDashboardInicio> {
         bool esMovil = constraints.maxWidth < 850;
 
         if (_estaCargando) {
-          return Center(child: CircularProgressIndicator(color: azulAgro));
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                CircularProgressIndicator(color: azulAgro),
+                const SizedBox(height: 15),
+                const Text("Calculando inventario y ganado...", style: TextStyle(color: Colors.grey)),
+              ],
+            )
+          );
         }
 
         return Scaffold(
           backgroundColor: const Color(0xFFF5F7FA),
-          body: SingleChildScrollView(
-            padding: const EdgeInsets.all(25),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // HEADER CON SALUDO Y CLIMA
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: const [
-                        Text("Resumen General", style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: Color(0xFF263238))),
-                        Text("Rancho Santa Fe", style: TextStyle(color: Colors.grey, fontSize: 16)),
-                      ],
-                    ),
-                    if (!esMovil) _widgetClima(), // En escritorio lo mostramos arriba
-                  ],
-                ),
-                
-                const SizedBox(height: 30),
-
-                // 1. TARJETAS KPI (YA LAS TENÍAS, MUY BIEN)
-                if (esMovil)
-                  Column(
-                    children: [
-                      _widgetClima(), // En móvil lo ponemos aquí
-                      const SizedBox(height: 20),
-                      _kpiCard("Total Cabezas", _totalCabezas, Icons.grass, azulAgro),
-                      const SizedBox(height: 15),
-                      _kpiCard("Alertas Stock", _alertasStock, Icons.warning_amber_rounded, Colors.orange),
-                      const SizedBox(height: 15),
-                      _kpiCard("Ventas Mes", _ventasMes, Icons.attach_money, verdeVenta),
-                    ],
-                  )
-                else
+          body: RefreshIndicator(
+            onRefresh: _cargarDatosDeLaNube, // Permite recargar al deslizar hacia abajo
+            color: azulAgro,
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.all(25),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // --- HEADER ---
                   Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Expanded(child: _kpiCard("Total Cabezas", _totalCabezas, Icons.grass, azulAgro)),
-                      const SizedBox(width: 20),
-                      Expanded(child: _kpiCard("Alertas Stock", _alertasStock, Icons.warning_amber_rounded, Colors.orange)),
-                      const SizedBox(width: 20),
-                      Expanded(child: _kpiCard("Ventas Mes", _ventasMes, Icons.attach_money, verdeVenta)),
-                    ],
-                  ),
-
-                const SizedBox(height: 30),
-
-                // 2. NUEVO: ACCESOS RÁPIDOS (BOTONERA)
-                const Text("Accesos Rápidos", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87)),
-                const SizedBox(height: 15),
-                _seccionAccesosRapidos(azulAgro),
-
-                const SizedBox(height: 30),
-
-                // 3. LAYOUT MIXTO: GRÁFICA + ALERTAS
-                if (esMovil)
-                  Column(
-                    children: [
-                      _seccionGraficaSimulada(),
-                      const SizedBox(height: 20),
-                      _seccionAlertas(azulAgro),
-                    ],
-                  )
-                else
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(flex: 2, child: _seccionGraficaSimulada()),
-                      const SizedBox(width: 20),
-                      Expanded(flex: 1, child: _seccionAlertas(azulAgro)),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: const [
+                          Text("Resumen General", style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: Color(0xFF263238))),
+                          Text("Rancho en Guadalupe Victoria", style: TextStyle(color: Colors.grey, fontSize: 16)),
+                        ],
+                      ),
+                      if (!esMovil) _widgetClima(),
                     ],
                   ),
                   
-                const SizedBox(height: 50), // Espacio final
-              ],
+                  const SizedBox(height: 30),
+
+                  // --- TARJETAS KPI (CON DATOS REALES) ---
+                  if (esMovil)
+                    Column(
+                      children: [
+                        _widgetClima(),
+                        const SizedBox(height: 20),
+                        _kpiCard("Total Cabezas", _totalCabezas, Icons.grass, azulAgro),
+                        const SizedBox(height: 15),
+                        // Si hay alertas críticas, la tarjeta se pinta roja, si no, naranja
+                        _kpiCard("Alertas de Stock", _alertasStock, Icons.warning_amber_rounded, int.parse(_alertasStock) > 0 ? Colors.red : Colors.orange),
+                        const SizedBox(height: 15),
+                        _kpiCard("Ventas Acumuladas", _ventasMes, Icons.attach_money, verdeVenta),
+                      ],
+                    )
+                  else
+                    Row(
+                      children: [
+                        Expanded(child: _kpiCard("Total Cabezas", _totalCabezas, Icons.grass, azulAgro)),
+                        const SizedBox(width: 20),
+                        Expanded(child: _kpiCard("Alertas de Stock", _alertasStock, Icons.warning_amber_rounded, int.parse(_alertasStock) > 0 ? Colors.red : Colors.orange)),
+                        const SizedBox(width: 20),
+                        Expanded(child: _kpiCard("Ventas Acumuladas", _ventasMes, Icons.attach_money, verdeVenta)),
+                      ],
+                    ),
+
+                  const SizedBox(height: 30),
+
+                  // --- ACCESOS RÁPIDOS ---
+                  const Text("Accesos Rápidos", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87)),
+                  const SizedBox(height: 15),
+                  _seccionAccesosRapidos(azulAgro),
+
+                  const SizedBox(height: 30),
+
+                  // --- ALERTAS REALES Y GRÁFICA ---
+                  if (esMovil)
+                    Column(
+                      children: [
+                        _seccionAlertas(azulAgro),
+                        const SizedBox(height: 20),
+                        _seccionGraficaSimulada(),
+                      ],
+                    )
+                  else
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(flex: 1, child: _seccionAlertas(azulAgro)),
+                        const SizedBox(width: 20),
+                        Expanded(flex: 2, child: _seccionGraficaSimulada()),
+                      ],
+                    ),
+                    
+                  const SizedBox(height: 50),
+                ],
+              ),
             ),
           ),
         );
@@ -174,7 +256,6 @@ class _VistaDashboardInicioState extends State<VistaDashboardInicio> {
     );
   }
 
-  // --- NUEVO: WIDGET DE CLIMA ---
   Widget _widgetClima() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
@@ -200,7 +281,6 @@ class _VistaDashboardInicioState extends State<VistaDashboardInicio> {
     );
   }
 
-  // --- NUEVO: ACCESOS RÁPIDOS ---
   Widget _seccionAccesosRapidos(Color colorTema) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -231,7 +311,6 @@ class _VistaDashboardInicioState extends State<VistaDashboardInicio> {
     );
   }
 
-  // --- NUEVO: GRÁFICA SIMULADA (BARRAS) ---
   Widget _seccionGraficaSimulada() {
     return Container(
       padding: const EdgeInsets.all(25),
@@ -243,8 +322,8 @@ class _VistaDashboardInicioState extends State<VistaDashboardInicio> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text("Producción de Leche (Semanal)", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-          const Text("Litros diarios", style: TextStyle(color: Colors.grey, fontSize: 12)),
+          const Text("Producción (Tendencia Semanal)", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+          const Text("Gráfica proyectada", style: TextStyle(color: Colors.grey, fontSize: 12)),
           const SizedBox(height: 20),
           SizedBox(
             height: 150,
@@ -285,7 +364,6 @@ class _VistaDashboardInicioState extends State<VistaDashboardInicio> {
     );
   }
 
-  // --- SECCIÓN DE ALERTAS (YA LA TENÍAS, LA EMPAQUETÉ) ---
   Widget _seccionAlertas(Color colorTema) {
     return Container(
       padding: const EdgeInsets.all(25),
@@ -300,23 +378,20 @@ class _VistaDashboardInicioState extends State<VistaDashboardInicio> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: const [
-              Text("⚠️ Alertas", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-              Text("Ver todo", style: TextStyle(color: Colors.blue, fontSize: 12, fontWeight: FontWeight.bold)),
+              Text("⚠️ Avisos de Inventario", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
             ],
           ),
-          const Divider(height: 30),
-          if (_listaAlertas.isEmpty)
-            const Padding(padding: EdgeInsets.symmetric(vertical: 20), child: Text("¡Todo en orden!", style: TextStyle(color: Colors.grey)))
-          else
-            ..._listaAlertas.map((alerta) {
-              Color colorAlerta;
-              switch (alerta['tipo']) {
-                case 'critico': colorAlerta = Colors.red; break;
-                case 'advertencia': colorAlerta = Colors.orange; break;
-                default: colorAlerta = colorTema;
-              }
-              return _alertaItem(alerta['titulo'], alerta['mensaje'], colorAlerta);
-            }).toList(),
+          const Divider(height: 20),
+          ..._listaAlertas.map((alerta) {
+            Color colorAlerta;
+            switch (alerta['tipo']) {
+              case 'critico': colorAlerta = Colors.red; break;
+              case 'advertencia': colorAlerta = Colors.orange; break;
+              case 'info': colorAlerta = Colors.green; break;
+              default: colorAlerta = colorTema;
+            }
+            return _alertaItem(alerta['titulo'], alerta['mensaje'], colorAlerta);
+          }).toList(),
         ],
       ),
     );
@@ -334,7 +409,7 @@ class _VistaDashboardInicioState extends State<VistaDashboardInicio> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(titulo, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black87)),
-                Text(mensaje, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                Text(mensaje, style: TextStyle(fontSize: 12, color: color == Colors.red ? Colors.red[700] : Colors.grey[600], fontWeight: color == Colors.red ? FontWeight.bold : FontWeight.normal)),
               ],
             ),
           )
