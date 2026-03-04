@@ -86,6 +86,18 @@ flutter run
 
 ---
 
+## 🗄️ Estructura de la Base de Datos (Firebase)
+
+A continuación se presenta un resumen de las colecciones y atributos clave inferidos de los servicios (para más detalle, revisar `ESTRUCTURA_BD.md`):
+
+- **`usuarios`**: Datos de acceso y roles (`nombre`, `email`, `rol`).
+- **`ganado`**: Registros individuales e historiales de los animales.
+- **`inventario`**: Control de stock de recursos, suministros y medicamentos (`cantidad`, `stockMinimo`).
+- **`tramites`**: Control de flujos (`tipo`, `etapa_actual`, `estado`), historial y documentos adjuntos.
+- **`sesiones`** y **`feedback_chatbot`**: Historial de chats del asistente de IA (`mensajes`, context).
+
+---
+
 ## 🌟 Funcionalidades Clave
 
 -   **Gestión de Ganado**: Registro y seguimiento detallado de animales.
