@@ -12,6 +12,7 @@ var usuariosRouter = require('./routes/usuarios');
 var inventarioRouter = require('./routes/inventario');
 var chatbotRouter = require('./routes/chatbot');
 var tramitesRouter = require('./routes/tramites');
+var uploadRouter = require('./routes/upload');
 
 var app = express();
 
@@ -33,6 +34,7 @@ app.use('/usuarios', usuariosRouter);
 app.use('/inventario', inventarioRouter);
 app.use('/chatbot', chatbotRouter);
 app.use('/tramites', tramitesRouter);
+app.use('/upload', uploadRouter);
 
 // catch 404 and forward to error handler
 app.use(function (req, res, next) {
@@ -49,6 +51,7 @@ app.use(function (err, req, res, next) {
     req.originalUrl.startsWith('/usuarios') ||
     req.originalUrl.startsWith('/inventario') ||
     req.originalUrl.startsWith('/tramites') ||
+    req.originalUrl.startsWith('/upload') ||
     req.originalUrl.startsWith('/users') ||
     req.headers.accept?.includes('application/json')) {
     return res.status(status).json({
