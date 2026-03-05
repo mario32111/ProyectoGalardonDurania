@@ -60,6 +60,7 @@ class TramitesService {
 
     async getSeguimiento(id) {
         const doc = await this.getById(id);
+        console.log(doc);
         if (!doc) return null;
 
         const info = TRAMITE_TYPES[doc.tipo];

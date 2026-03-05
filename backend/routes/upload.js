@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const { uploadFile, deleteFileByUrl } = require('../services/firebaseStorageService');
+const tramitesService = require('../services/tramitesService');
 
 // Configuración de multer para almacenar el archivo en memoria
 const storage = multer.memoryStorage();
@@ -19,15 +20,31 @@ const upload = multer({
  */
 router.post('/', upload.single('file'), async (req, res) => {
     try {
-        if (!req.file) {
+        if (!req.file || !req.body.tramite_id) {
             return res.status(400).json({ success: false, message: 'Ningún archivo proporcionado.' });
         }
 
         // Carpeta destino opcional si se envía por body (ej. "ganado", "usuarios")
         const folder = req.body.folder || 'uploads';
+        const { tramite_id } = req.body;
 
         // Llamar al servicio
         const fileUrl = await uploadFile(req.file, folder);
+
+        if (tramite_id) {
+            // Registrar el documento en el trámite utilizando el servicio
+            await tramitesService.addDocumento(tramite_id, {
+                nombre_documento: req.file.originalname,
+                tipo_documento: req.file.mimetype,
+                url: fileUrl
+            });
+
+            // Avanzar la etapa del trámite utilizando el servicio
+            await tramitesService.avanzarEtapa(tramite_id, {
+                responsable: req.body.usuario_id || 'Sistema',
+                observaciones: `Documento adjuntado: ${req.file.originalname}`
+            });
+        }
 
         res.status(200).json({
             success: true,

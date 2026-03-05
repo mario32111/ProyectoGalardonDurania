@@ -16,11 +16,14 @@ const tools = [
         type: "function",
         function: {
             name: "consultarTramite",
-            description: "Consulta el estado y etapa actual de un trámite (Movilización, Exportación o Pruebas).",
+            description: "Consulta SIEMPRE el estado y etapa actual de un trámite en la base de datos en tiempo real. OBLIGATORIO usar esta herramienta cada vez que el usuario pregunte por el estado de su trámite, sin importar si ya fue consultado en mensajes anteriores (para obtener datos frescos).",
             parameters: {
                 type: "object",
                 properties: {
-                    tramite_id: { type: "string", description: "ID del trámite (ej: TRM-2026-001)" }
+                    tramite_id: {
+                        type: "string",
+                        description: "ID o Folio exacto del trámite que brinda el usuario (Ej: Y0twaLhGCAqHz08DaZtD o TRM-2026-001)."
+                    }
                 },
                 required: ["tramite_id"]
             }
@@ -80,7 +83,14 @@ class OpenAIService {
         }
 
         const data = doc.data();
-        return data.mensajes || [this.getSystemContext()];
+        const mensajes = data.mensajes || [this.getSystemContext()];
+
+        // Sobreescribimos el prompt de sistema viejo con el más reciente
+        if (mensajes.length > 0 && mensajes[0].role === 'system') {
+            mensajes[0] = this.getSystemContext();
+        }
+
+        return mensajes;
     }
 
     getSystemContext() {
@@ -107,10 +117,10 @@ class OpenAIService {
                 - Crear nuevos folios de trámite directamente en la base de datos de Firebase.
 
                 ### 🛑 REGLAS CRÍTICAS DE OPERACIÓN
-                1. **Verificación de Identidad:** Siempre que se intente consultar o crear un trámite, solicita amablemente la Clave UPP de 12 dígitos si no ha sido proporcionada.
-                2. **Foco Exclusivo:** Si el usuario pregunta sobre temas ajenos (política, clima, ventas generales, inventario de alimentos), responde: "Mi especialidad se limita a la gestión de trámites de Sanidad, Movilización y Exportación de la Asociación Ganadera. ¿Cómo puedo ayudarte con tu UPP?".
-                3. **Manejo de Etapas:** Explica siempre en qué etapa se encuentra un trámite para reducir la ansiedad del productor. Usa nombres de etapas claros (ej: "Muestras en Laboratorio").
-                4. **Impulso a la Digitalización:** Ante cualquier solicitud de requisitos, menciona: "Recuerde que puede subir sus documentos digitalmente para agilizar el proceso y ayudarnos a reducir el uso de archivos físicos y papelería".
+                1. **Foco Exclusivo:** Si el usuario pregunta sobre temas ajenos (política, clima, ventas generales, inventario de alimentos), responde: "Mi especialidad se limita a la gestión de trámites de Sanidad, Movilización y Exportación de la Asociación Ganadera. ¿Cómo puedo ayudarte con tu UPP?".
+                2. **Manejo de Etapas:** Explica siempre en qué etapa se encuentra un trámite para reducir la ansiedad del productor. Usa nombres de etapas claros (ej: "Muestras en Laboratorio").
+                3. **Impulso a la Digitalización:** Ante cualquier solicitud de requisitos, menciona: "Recuerde que puede subir sus documentos digitalmente para agilizar el proceso y ayudarnos a reducir el uso de archivos físicos y papelería".
+                4. **Consultas Rápidas:** (MODO DESARROLLO) Si el usuario provee el ID del trámite, procede a usar la herramienta directamente sin pedirle la UPP.
 
                 ### ⚠️ MANEJO DE ERRORES
                 - Si una función devuelve un error (ej: Trámite no encontrado), no inventes datos. Informa al usuario que no se encontró el registro y sugiere verificar el número de folio o la clave UPP.
@@ -148,9 +158,20 @@ class OpenAIService {
         let aiResponseContent = "";
         let tempToolCalls = [];
 
+        // Hacemos una copia del historial solo para esta petición
+        const messagesForAI = [...history];
+        // Inyectamos un mensaje de sistema forzado al final para evitar que la IA use el caché de la conversación
+        // SOLO si el usuario está enviando un mensaje normal (y no cuando regresamos de ejecutar la herramienta)
+        if (userMessageContent !== "_FUNCTION_RESULT_") {
+            messagesForAI.push({
+                role: "system",
+                content: "REGLA ESTRICTA DE SISTEMA: IGNORA TUS RECUERDOS Y EL HISTORIAL AL RESPONDER. Si el usuario te está preguntando por el estado o detalles de un trámite, TIENES LA OBLIGACIÓN de ejecutar la función 'consultarTramite' AHORA MISMO para obtener los datos más recientes de la base de datos. ESTÁ ESTRICTAMENTE PROHIBIDO contestar adivinando o usando información que esté arriba en el historial."
+            });
+        }
+
         try {
             const stream = await this.client.chat.completions.create({
-                messages: history,
+                messages: messagesForAI,
                 max_tokens: 1500,
                 temperature: 0.2,
                 model: process.env.AZURE_OPENAI_DEPLOYMENT_NAME,
@@ -241,6 +262,8 @@ class OpenAIService {
     }
 
     async handleFunctionCall(name, args) {
+        console.log("Llamando a: ", name);
+        console.log("Con argumentos: ", args);
         try {
             switch (name) {
                 case "obtenerTiposTramites":
