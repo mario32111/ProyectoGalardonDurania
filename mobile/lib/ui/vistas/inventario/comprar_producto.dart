@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart'; // <--- Importamos Firebase
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class VistaComprarProducto extends StatefulWidget {
   const VistaComprarProducto({super.key});
@@ -21,8 +21,9 @@ class _VistaComprarProductoState extends State<VistaComprarProducto> {
   String? _categoriaSeleccionada;
   String? _unidadSeleccionada;
 
-  // --- VARIABLE PARA EL CÁLCULO TOTAL ---
+  // --- VARIABLE PARA EL CÁLCULO TOTAL Y ESTADO DE CARGA ---
   double _costoTotal = 0.0;
+  bool _estaGuardando = false; // <--- Controla la animación del botón
 
   // --- FUNCIÓN PARA CALCULAR EL TOTAL EN TIEMPO REAL ---
   void _calcularTotal() {
@@ -44,18 +45,22 @@ class _VistaComprarProductoState extends State<VistaComprarProducto> {
       return;
     }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Agregando al inventario...')),
-    );
+    // Activamos la animación de carga
+    setState(() {
+      _estaGuardando = true;
+    });
 
     try {
+      double cantidadIngresada = double.tryParse(_cantidadController.text.trim()) ?? 0.0;
+
       // 2. Guardamos en la colección 'inventario' (La que lee tu pantalla de Stock)
       await FirebaseFirestore.instance.collection('inventario').add({
         'nombre': _nombreController.text.trim(),
         'categoria': _categoriaSeleccionada ?? 'Sin categoría',
         'proveedor': _proveedorController.text.trim(),
-        'cantidad_actual': double.tryParse(_cantidadController.text.trim()) ?? 0.0,
-        'capacidad_maxima': 1000.0, // Un valor por defecto para que la barra gráfica funcione
+        'cantidad_actual': cantidadIngresada,
+        // Si ingresas más de 1000, la capacidad máxima se ajusta para que la gráfica no se rompa
+        'capacidad_maxima': cantidadIngresada > 1000.0 ? cantidadIngresada + 200 : 1000.0, 
         'unidad': _unidadSeleccionada ?? 'Und',
         'costo_unitario': double.tryParse(_costoController.text.trim()) ?? 0.0,
         'costo_total_compra': _costoTotal,
@@ -74,13 +79,24 @@ class _VistaComprarProductoState extends State<VistaComprarProducto> {
         _unidadSeleccionada = null;
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('¡Producto agregado al stock con éxito!'), backgroundColor: Colors.green),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('¡Producto agregado al stock con éxito!'), backgroundColor: Colors.green),
+        );
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error al guardar: $e'), backgroundColor: Colors.red),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al guardar: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      // Apagamos la animación de carga
+      if (mounted) {
+        setState(() {
+          _estaGuardando = false;
+        });
+      }
     }
   }
 
@@ -198,7 +214,7 @@ class _VistaComprarProductoState extends State<VistaComprarProducto> {
 
             const SizedBox(height: 40),
 
-            // --- BOTÓN DE ACCIÓN ---
+            // --- BOTÓN DE ACCIÓN (CON ANIMACIÓN DE CARGA) ---
             SizedBox(
               width: double.infinity,
               height: 55,
@@ -208,9 +224,14 @@ class _VistaComprarProductoState extends State<VistaComprarProducto> {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   elevation: 5,
                 ),
-                onPressed: _guardarEnInventario, // <--- Conectado a Firebase
-                icon: const Icon(Icons.add_shopping_cart, color: Colors.white, size: 28),
-                label: const Text("AGREGAR AL INVENTARIO", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                onPressed: _estaGuardando ? null : _guardarEnInventario, // <--- Se bloquea si está cargando
+                icon: _estaGuardando 
+                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                    : const Icon(Icons.add_shopping_cart, color: Colors.white, size: 28),
+                label: Text(
+                  _estaGuardando ? "GUARDANDO..." : "AGREGAR AL INVENTARIO", 
+                  style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)
+                ),
               ),
             ),
             const SizedBox(height: 20),
@@ -239,7 +260,6 @@ class _VistaComprarProductoState extends State<VistaComprarProducto> {
     );
   }
 
-  // Modificado para aceptar controladores y onChanged
   Widget _campoTexto(String label, IconData icono, TextInputType tipo, TextEditingController controlador, {Function(String)? alCambiar}) {
     return TextField(
       controller: controlador,

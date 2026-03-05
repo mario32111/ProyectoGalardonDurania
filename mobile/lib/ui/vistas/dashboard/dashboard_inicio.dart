@@ -20,7 +20,7 @@ class _VistaDashboardInicioState extends State<VistaDashboardInicio> {
   @override
   void initState() {
     super.initState();
-    _cargarDatosDeLaNube(); // Ejecuta la lectura de Firebase al abrir
+    _cargarDatosDeLaNube(); 
   }
 
   // ==============================================================================
@@ -33,17 +33,14 @@ class _VistaDashboardInicioState extends State<VistaDashboardInicio> {
     List<Map<String, dynamic>> alertasReales = [];
 
     try {
-      // 1. EXTRAER TOTAL DE GANADO
       var ganadoObtenido = await FirebaseFirestore.instance.collection('ganado').get();
       contadorCabezas = ganadoObtenido.docs.length;
 
-      // 2. EXTRAER TOTAL DE DINERO EN VENTAS
       var ventasObtenidas = await FirebaseFirestore.instance.collection('ventas_salidas').get();
       for (var doc in ventasObtenidas.docs) {
         sumaVentas += (doc.data()['monto_total'] ?? 0.0);
       }
 
-      // 3. REVISAR INVENTARIO (Buscando lo que se terminó o está por terminarse)
       var inventarioObtenido = await FirebaseFirestore.instance.collection('inventario').get();
       for (var doc in inventarioObtenido.docs) {
         var datos = doc.data();
@@ -52,12 +49,10 @@ class _VistaDashboardInicioState extends State<VistaDashboardInicio> {
         double maxima = (datos['capacidad_maxima'] ?? 100).toDouble();
         String unidad = datos['unidad'] ?? 'Und';
         
-        if (maxima <= 0) maxima = 1; // Protección matemática
+        if (maxima <= 0) maxima = 1; 
         double porcentaje = actual / maxima;
 
-        // Lógica de Alertas Inteligentes
         if (actual <= 0) {
-          // CASO 1: SE TERMINÓ EL ALIMENTO COMPLETAMENTE
           contadorAlertasCriticas++;
           alertasReales.add({
             "titulo": nombreInsumo,
@@ -65,7 +60,6 @@ class _VistaDashboardInicioState extends State<VistaDashboardInicio> {
             "tipo": "critico"
           });
         } else if (porcentaje <= 0.20) {
-          // CASO 2: ESTÁ A PUNTO DE TERMINARSE (Menos del 20%)
           contadorAlertasCriticas++;
           alertasReales.add({
             "titulo": nombreInsumo,
@@ -73,7 +67,6 @@ class _VistaDashboardInicioState extends State<VistaDashboardInicio> {
             "tipo": "critico"
           });
         } else if (porcentaje <= 0.50) {
-          // CASO 3: A LA MITAD (Se muestra la alerta pero no se cuenta como crítica)
           alertasReales.add({
             "titulo": nombreInsumo,
             "mensaje": "Nivel medio al ${(porcentaje * 100).toInt()}%",
@@ -82,7 +75,6 @@ class _VistaDashboardInicioState extends State<VistaDashboardInicio> {
         }
       }
 
-      // Si todo está lleno, agregamos un mensaje positivo
       if (alertasReales.isEmpty) {
         alertasReales.add({
           "titulo": "Inventario Sano",
@@ -91,15 +83,11 @@ class _VistaDashboardInicioState extends State<VistaDashboardInicio> {
         });
       }
 
-      // 4. ACTUALIZAR LA PANTALLA
       if (mounted) {
         setState(() {
           _totalCabezas = contadorCabezas.toString();
-          // Formateamos el dinero para que se vea bonito (ej. $15,000.00)
           _ventasMes = "\$${sumaVentas.toStringAsFixed(2).replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},')}";
           _alertasStock = contadorAlertasCriticas.toString();
-          
-          // Mostramos las primeras 5 alertas
           _listaAlertas = alertasReales.take(5).toList(); 
           _estaCargando = false;
         });
@@ -110,6 +98,126 @@ class _VistaDashboardInicioState extends State<VistaDashboardInicio> {
         setState(() => _estaCargando = false);
       }
     }
+  }
+
+  // ==============================================================================
+  // FUNCIÓN PARA ABRIR FORMULARIOS Y ENVIAR A FIREBASE
+  // ==============================================================================
+  void _abrirAccionRapida(String titulo, IconData icono, Color color, String coleccionBD, String nombreCampo, {bool esNumero = false}) {
+    TextEditingController inputController = TextEditingController();
+    bool guardando = false;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (BuildContext sheetContext) {
+        return StatefulBuilder(
+          builder: (BuildContext modalContext, StateSetter setModalState) {
+            return Container(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(modalContext).viewInsets.bottom,
+                top: 25, left: 25, right: 25
+              ),
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.only(topLeft: Radius.circular(25), topRight: Radius.circular(25)),
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Encabezado del modal
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(color: color.withOpacity(0.1), shape: BoxShape.circle),
+                          child: Icon(icono, color: color, size: 28),
+                        ),
+                        const SizedBox(width: 15),
+                        Expanded(child: Text(titulo, style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: color))),
+                        IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(modalContext)),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    
+                    const Text("Complete la información para registrar en el sistema", style: TextStyle(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 10),
+                    
+                    // Campo de texto conectado
+                    TextField(
+                      controller: inputController,
+                      keyboardType: esNumero ? const TextInputType.numberWithOptions(decimal: true) : TextInputType.text,
+                      decoration: InputDecoration(
+                        hintText: esNumero ? "Ej. 15000.50" : "Ej. Identificador o descripción...",
+                        filled: true,
+                        fillColor: Colors.grey[100],
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                        prefixIcon: Icon(Icons.edit, color: Colors.grey[400]),
+                      ),
+                    ),
+                    const SizedBox(height: 30),
+
+                    // Botón de guardar conectado a Firebase
+                    SizedBox(
+                      width: double.infinity,
+                      height: 55,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: color,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        onPressed: guardando ? null : () async {
+                          if (inputController.text.trim().isEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('El campo no puede estar vacío'), backgroundColor: Colors.red));
+                            return;
+                          }
+
+                          setModalState(() { guardando = true; });
+
+                          try {
+                            // Preparar el valor a guardar (número o texto)
+                            dynamic valorAGuardar = inputController.text.trim();
+                            if (esNumero) {
+                              valorAGuardar = double.tryParse(valorAGuardar) ?? 0.0;
+                            }
+
+                            // GUARDAR EN FIREBASE
+                            await FirebaseFirestore.instance.collection(coleccionBD).add({
+                              nombreCampo: valorAGuardar,
+                              'fecha_registro': FieldValue.serverTimestamp(),
+                              'origen': 'Acceso Rápido Dashboard'
+                            });
+
+                            if (mounted) {
+                              Navigator.pop(modalContext);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('¡Registro guardado en la nube!'), backgroundColor: Colors.green)
+                              );
+                              // Refrescar el dashboard automáticamente
+                              _cargarDatosDeLaNube();
+                            }
+                          } catch (e) {
+                            setModalState(() { guardando = false; });
+                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
+                          }
+                        },
+                        child: guardando 
+                          ? const CircularProgressIndicator(color: Colors.white)
+                          : const Text("GUARDAR REGISTRO", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                    const SizedBox(height: 25),
+                  ],
+                ),
+              )
+            );
+          }
+        );
+      }
+    );
   }
 
   @override
@@ -137,7 +245,7 @@ class _VistaDashboardInicioState extends State<VistaDashboardInicio> {
         return Scaffold(
           backgroundColor: const Color(0xFFF5F7FA),
           body: RefreshIndicator(
-            onRefresh: _cargarDatosDeLaNube, // Permite recargar al deslizar hacia abajo
+            onRefresh: _cargarDatosDeLaNube, 
             color: azulAgro,
             child: SingleChildScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
@@ -162,7 +270,7 @@ class _VistaDashboardInicioState extends State<VistaDashboardInicio> {
                   
                   const SizedBox(height: 30),
 
-                  // --- TARJETAS KPI (CON DATOS REALES) ---
+                  // --- TARJETAS KPI ---
                   if (esMovil)
                     Column(
                       children: [
@@ -170,7 +278,6 @@ class _VistaDashboardInicioState extends State<VistaDashboardInicio> {
                         const SizedBox(height: 20),
                         _kpiCard("Total Cabezas", _totalCabezas, Icons.grass, azulAgro),
                         const SizedBox(height: 15),
-                        // Si hay alertas críticas, la tarjeta se pinta roja, si no, naranja
                         _kpiCard("Alertas de Stock", _alertasStock, Icons.warning_amber_rounded, int.parse(_alertasStock) > 0 ? Colors.red : Colors.orange),
                         const SizedBox(height: 15),
                         _kpiCard("Ventas Acumuladas", _ventasMes, Icons.attach_money, verdeVenta),
@@ -189,7 +296,7 @@ class _VistaDashboardInicioState extends State<VistaDashboardInicio> {
 
                   const SizedBox(height: 30),
 
-                  // --- ACCESOS RÁPIDOS ---
+                  // --- ACCESOS RÁPIDOS (CONECTADOS A BD) ---
                   const Text("Accesos Rápidos", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87)),
                   const SizedBox(height: 15),
                   _seccionAccesosRapidos(azulAgro),
@@ -285,29 +392,48 @@ class _VistaDashboardInicioState extends State<VistaDashboardInicio> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceAround,
       children: [
-        _botonRapido(Icons.add_circle_outline, "Nuevo\nAnimal", colorTema),
-        _botonRapido(Icons.local_hospital_outlined, "Reportar\nEnfermedad", Colors.redAccent),
-        _botonRapido(Icons.attach_money, "Registrar\nVenta", Colors.green),
-        _botonRapido(Icons.inventory_2_outlined, "Pedir\nInsumos", Colors.orange),
+        // AHORA MANDAMOS LA COLECCIÓN Y EL CAMPO A FIREBASE
+        _botonRapido(Icons.add_circle_outline, "Nuevo\nAnimal", colorTema, 
+          () => _abrirAccionRapida("Registrar Nuevo Animal", Icons.pets, colorTema, "ganado", "identificador_arete")),
+        
+        _botonRapido(Icons.local_hospital_outlined, "Reportar\nEnfermedad", Colors.redAccent, 
+          () => _abrirAccionRapida("Reporte Veterinario", Icons.medical_services, Colors.redAccent, "reportes_salud", "descripcion_sintomas")),
+        
+        _botonRapido(Icons.attach_money, "Registrar\nVenta", Colors.green, 
+          () => _abrirAccionRapida("Nueva Venta Rápida", Icons.point_of_sale, Colors.green, "ventas_salidas", "monto_total", esNumero: true)),
+        
+        _botonRapido(Icons.inventory_2_outlined, "Pedir\nInsumos", Colors.orange, 
+          () => _abrirAccionRapida("Solicitar Alimento", Icons.local_shipping, Colors.orange, "pedidos_inventario", "insumo_solicitado")),
       ],
     );
   }
 
-  Widget _botonRapido(IconData icon, String label, Color color) {
-    return Column(
-      children: [
-        Container(
-          padding: const EdgeInsets.all(15),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            shape: BoxShape.circle,
-            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 5, offset: const Offset(0, 2))],
+  Widget _botonRapido(IconData icon, String label, Color color, VoidCallback onTap) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(15),
+        splashColor: color.withOpacity(0.2),
+        child: Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: Column(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(15),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 5, offset: const Offset(0, 2))],
+                ),
+                child: Icon(icon, color: color, size: 28),
+              ),
+              const SizedBox(height: 8),
+              Text(label, textAlign: TextAlign.center, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.black54)),
+            ],
           ),
-          child: Icon(icon, color: color, size: 28),
         ),
-        const SizedBox(height: 8),
-        Text(label, textAlign: TextAlign.center, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.black54)),
-      ],
+      ),
     );
   }
 

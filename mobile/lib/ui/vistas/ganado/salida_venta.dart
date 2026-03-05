@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart'; // <--- Importamos Firebase
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class VistaSalidaVenta extends StatefulWidget {
   const VistaSalidaVenta({super.key});
@@ -11,7 +11,7 @@ class VistaSalidaVenta extends StatefulWidget {
 class _VistaSalidaVentaState extends State<VistaSalidaVenta> {
   final Color verdeVenta = const Color(0xFF2E7D32);
 
-  // --- CONTROLADORES: Para atrapar lo que escribes ---
+  // --- CONTROLADORES ---
   final TextEditingController _clienteController = TextEditingController();
   final TextEditingController _destinoController = TextEditingController();
   final TextEditingController _fechaController = TextEditingController();
@@ -19,8 +19,37 @@ class _VistaSalidaVentaState extends State<VistaSalidaVenta> {
   final TextEditingController _pesoController = TextEditingController();
   final TextEditingController _precioController = TextEditingController();
 
-  // Variable para guardar el cálculo automático del total
   double _montoTotal = 0.0;
+  bool _estaGuardando = false; // <--- Nuevo: Controla la ruedita de carga
+
+  // --- SELECCIONADOR DE FECHA (CALENDARIO) ---
+  Future<void> _seleccionarFecha(BuildContext context) async {
+    final DateTime? fechaElegida = await showDatePicker(
+      context: context,
+      initialDate: DateTime.now(),
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2030),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: ColorScheme.light(
+              primary: verdeVenta, // Color del header del calendario
+              onPrimary: Colors.white,
+              onSurface: Colors.black,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (fechaElegida != null) {
+      setState(() {
+        // Formatea la fecha para que se vea como DD/MM/YYYY
+        _fechaController.text = "${fechaElegida.day.toString().padLeft(2, '0')}/${fechaElegida.month.toString().padLeft(2, '0')}/${fechaElegida.year}";
+      });
+    }
+  }
 
   // --- FUNCIÓN PARA CALCULAR EL TOTAL EN TIEMPO REAL ---
   void _calcularTotal() {
@@ -34,7 +63,6 @@ class _VistaSalidaVentaState extends State<VistaSalidaVenta> {
 
   // --- FUNCIÓN QUE MANDA LOS DATOS A FIREBASE ---
   Future<void> _guardarVenta() async {
-    // 1. Validamos que no envíen datos vacíos importantes
     if (_clienteController.text.trim().isEmpty || _pesoController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Falta el cliente o el peso de la venta'), backgroundColor: Colors.red),
@@ -42,16 +70,15 @@ class _VistaSalidaVentaState extends State<VistaSalidaVenta> {
       return;
     }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Registrando venta en la nube...')),
-    );
+    setState(() {
+      _estaGuardando = true; // Empieza a girar la ruedita
+    });
 
     try {
-      // 2. Enviamos todo a una colección llamada 'ventas_salidas'
       await FirebaseFirestore.instance.collection('ventas_salidas').add({
         'cliente': _clienteController.text.trim(),
         'destino': _destinoController.text.trim(),
-        'fecha_salida': _fechaController.text.trim(),
+        'fecha_salida': _fechaController.text.trim().isEmpty ? 'Sin fecha' : _fechaController.text.trim(),
         'cantidad_cabezas': int.tryParse(_cabezasController.text.trim()) ?? 0,
         'peso_total_kg': double.tryParse(_pesoController.text.trim()) ?? 0.0,
         'precio_venta_kg': double.tryParse(_precioController.text.trim()) ?? 0.0,
@@ -59,7 +86,7 @@ class _VistaSalidaVentaState extends State<VistaSalidaVenta> {
         'fecha_registro_sistema': FieldValue.serverTimestamp(),
       });
 
-      // 3. Limpiamos las cajas y reseteamos el total
+      // Limpiamos todo
       _clienteController.clear();
       _destinoController.clear();
       _fechaController.clear();
@@ -71,13 +98,21 @@ class _VistaSalidaVentaState extends State<VistaSalidaVenta> {
         _montoTotal = 0.0;
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('¡Venta registrada con éxito!'), backgroundColor: Colors.green),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('¡Venta registrada con éxito!'), backgroundColor: Colors.green),
+        );
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error al guardar: $e'), backgroundColor: Colors.red),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al guardar: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      setState(() {
+        _estaGuardando = false; // Detiene la ruedita pase lo que pase
+      });
     }
   }
 
@@ -125,7 +160,21 @@ class _VistaSalidaVentaState extends State<VistaSalidaVenta> {
                   const SizedBox(height: 15),
                   _campoTexto("Destino (Rastro/Engorda)", Icons.local_shipping_outlined, TextInputType.text, _destinoController),
                   const SizedBox(height: 15),
-                  _campoTexto("Fecha de Salida", Icons.calendar_today, TextInputType.datetime, _fechaController),
+                  
+                  // Campo de Fecha conectado al Calendario
+                  TextField(
+                    controller: _fechaController,
+                    readOnly: true, // Evita que se escriba con el teclado
+                    onTap: () => _seleccionarFecha(context), // Abre el calendario
+                    decoration: InputDecoration(
+                      labelText: "Fecha de Salida",
+                      prefixIcon: const Icon(Icons.calendar_today, color: Colors.grey),
+                      filled: true,
+                      fillColor: const Color(0xFFF8FAFC),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                      contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -167,7 +216,7 @@ class _VistaSalidaVentaState extends State<VistaSalidaVenta> {
 
             const SizedBox(height: 40),
 
-            // --- BOTÓN CORREGIDO ---
+            // --- BOTÓN FINALIZAR (CON ANIMACIÓN DE CARGA) ---
             SizedBox(
               width: double.infinity,
               height: 55,
@@ -177,9 +226,14 @@ class _VistaSalidaVentaState extends State<VistaSalidaVenta> {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   elevation: 5,
                 ),
-                onPressed: _guardarVenta, // <--- Conectado a Firebase
-                icon: const Icon(Icons.check_circle_outline, color: Colors.white, size: 28),
-                label: const Text("FINALIZAR VENTA", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                onPressed: _estaGuardando ? null : _guardarVenta, // Si está guardando, se bloquea
+                icon: _estaGuardando 
+                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                    : const Icon(Icons.check_circle_outline, color: Colors.white, size: 28),
+                label: Text(
+                  _estaGuardando ? "PROCESANDO..." : "FINALIZAR VENTA", 
+                  style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)
+                ),
               ),
             ),
             const SizedBox(height: 20),
@@ -190,7 +244,7 @@ class _VistaSalidaVentaState extends State<VistaSalidaVenta> {
   }
 
   // -----------------------------------------------------------
-  // FUNCIONES DE AYUDA
+  // FUNCIONES DE AYUDA VISUAL
   // -----------------------------------------------------------
 
   Widget _tituloSeccion(String texto) {
@@ -208,12 +262,11 @@ class _VistaSalidaVentaState extends State<VistaSalidaVenta> {
     );
   }
 
-  // Modificado para aceptar controladores y detectar cambios (onChanged)
   Widget _campoTexto(String label, IconData icono, TextInputType tipo, TextEditingController controlador, {Function(String)? alCambiar}) {
     return TextField(
       controller: controlador,
       keyboardType: tipo,
-      onChanged: alCambiar, // Permite ejecutar funciones al escribir
+      onChanged: alCambiar, 
       decoration: InputDecoration(
         labelText: label,
         prefixIcon: Icon(icono, color: Colors.grey),

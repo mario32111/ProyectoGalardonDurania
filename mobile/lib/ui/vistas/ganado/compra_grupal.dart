@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart'; // <--- Importamos Firebase
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class VistaCompraGrupal extends StatefulWidget {
   const VistaCompraGrupal({super.key});
@@ -11,7 +11,7 @@ class VistaCompraGrupal extends StatefulWidget {
 class _VistaCompraGrupalState extends State<VistaCompraGrupal> {
   final Color azulAgro = const Color(0xFF01579B);
 
-  // --- CONTROLADORES: Para atrapar lo que escribes ---
+  // --- CONTROLADORES ---
   final TextEditingController _proveedorController = TextEditingController();
   final TextEditingController _origenController = TextEditingController();
   final TextEditingController _fechaController = TextEditingController();
@@ -19,8 +19,36 @@ class _VistaCompraGrupalState extends State<VistaCompraGrupal> {
   final TextEditingController _pesoController = TextEditingController();
   final TextEditingController _precioController = TextEditingController();
 
-  // Variable para guardar el cálculo automático del total
   double _totalEstimado = 0.0;
+  bool _estaGuardando = false; // <--- Nuevo: Controla la ruedita de carga
+
+  // --- SELECCIONADOR DE FECHA (CALENDARIO) ---
+  Future<void> _seleccionarFecha(BuildContext context) async {
+    final DateTime? fechaElegida = await showDatePicker(
+      context: context,
+      initialDate: DateTime.now(),
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2030),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: ColorScheme.light(
+              primary: azulAgro, // Color del calendario combinado con esta pantalla
+              onPrimary: Colors.white,
+              onSurface: Colors.black,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (fechaElegida != null) {
+      setState(() {
+        _fechaController.text = "${fechaElegida.day.toString().padLeft(2, '0')}/${fechaElegida.month.toString().padLeft(2, '0')}/${fechaElegida.year}";
+      });
+    }
+  }
 
   // --- FUNCIÓN PARA CALCULAR EL TOTAL EN TIEMPO REAL ---
   void _calcularTotal() {
@@ -34,7 +62,6 @@ class _VistaCompraGrupalState extends State<VistaCompraGrupal> {
 
   // --- FUNCIÓN QUE MANDA LOS DATOS A FIREBASE ---
   Future<void> _guardarCompra() async {
-    // 1. Validamos que no envíen datos vacíos importantes
     if (_proveedorController.text.trim().isEmpty || _cabezasController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Falta el proveedor o la cantidad de cabezas'), backgroundColor: Colors.red),
@@ -42,16 +69,15 @@ class _VistaCompraGrupalState extends State<VistaCompraGrupal> {
       return;
     }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Registrando lote en la nube...')),
-    );
+    setState(() {
+      _estaGuardando = true; // Empieza a girar la ruedita
+    });
 
     try {
-      // 2. Enviamos todo a una colección llamada 'compras_lotes'
       await FirebaseFirestore.instance.collection('compras_lotes').add({
         'proveedor': _proveedorController.text.trim(),
         'origen': _origenController.text.trim(),
-        'fecha_indicada': _fechaController.text.trim(),
+        'fecha_indicada': _fechaController.text.trim().isEmpty ? 'Sin fecha' : _fechaController.text.trim(),
         'cantidad_cabezas': int.tryParse(_cabezasController.text.trim()) ?? 0,
         'peso_total_kg': double.tryParse(_pesoController.text.trim()) ?? 0.0,
         'precio_por_kilo': double.tryParse(_precioController.text.trim()) ?? 0.0,
@@ -59,7 +85,7 @@ class _VistaCompraGrupalState extends State<VistaCompraGrupal> {
         'fecha_registro_sistema': FieldValue.serverTimestamp(),
       });
 
-      // 3. Limpiamos las cajas y reseteamos el total
+      // Limpiamos las cajas
       _proveedorController.clear();
       _origenController.clear();
       _fechaController.clear();
@@ -71,13 +97,21 @@ class _VistaCompraGrupalState extends State<VistaCompraGrupal> {
         _totalEstimado = 0.0;
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('¡Compra grupal registrada con éxito!'), backgroundColor: Colors.green),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('¡Compra grupal registrada con éxito!'), backgroundColor: Colors.green),
+        );
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error al guardar: $e'), backgroundColor: Colors.red),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al guardar: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      setState(() {
+        _estaGuardando = false; // Detiene la ruedita
+      });
     }
   }
 
@@ -122,7 +156,21 @@ class _VistaCompraGrupalState extends State<VistaCompraGrupal> {
                   const SizedBox(height: 15),
                   _campoTexto("Lugar de Origen (Rancho/Ciudad)", Icons.map, TextInputType.text, _origenController),
                   const SizedBox(height: 15),
-                  _campoTexto("Fecha de Compra", Icons.calendar_today, TextInputType.datetime, _fechaController),
+                  
+                  // Campo de Fecha conectado al Calendario
+                  TextField(
+                    controller: _fechaController,
+                    readOnly: true, // Bloquea el teclado
+                    onTap: () => _seleccionarFecha(context), // Abre el calendario
+                    decoration: InputDecoration(
+                      labelText: "Fecha de Compra",
+                      prefixIcon: const Icon(Icons.calendar_today, color: Colors.grey),
+                      filled: true,
+                      fillColor: const Color(0xFFF8FAFC),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                      contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -140,15 +188,14 @@ class _VistaCompraGrupalState extends State<VistaCompraGrupal> {
                     children: [
                       Expanded(child: _campoTexto("Cant. Cabezas", Icons.pets, TextInputType.number, _cabezasController)),
                       const SizedBox(width: 15),
-                      // Al escribir en peso, calculamos el total
                       Expanded(child: _campoTexto("Peso Total (Kg)", Icons.monitor_weight, const TextInputType.numberWithOptions(decimal: true), _pesoController, alCambiar: (_) => _calcularTotal())),
                     ],
                   ),
                   const SizedBox(height: 15),
-                  // Al escribir en precio, calculamos el total
                   _campoTexto("Precio Pactado por Kilo (\$)", Icons.attach_money, const TextInputType.numberWithOptions(decimal: true), _precioController, alCambiar: (_) => _calcularTotal()),
                   
                   const SizedBox(height: 20),
+                  
                   // Resumen dinámico del total
                   Container(
                     padding: const EdgeInsets.all(15),
@@ -167,7 +214,7 @@ class _VistaCompraGrupalState extends State<VistaCompraGrupal> {
 
             const SizedBox(height: 40),
 
-            // --- BOTÓN DE GUARDADO ---
+            // --- BOTÓN DE GUARDADO (CON ANIMACIÓN) ---
             SizedBox(
               width: double.infinity,
               height: 55,
@@ -177,9 +224,14 @@ class _VistaCompraGrupalState extends State<VistaCompraGrupal> {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   elevation: 5,
                 ),
-                onPressed: _guardarCompra, // <--- Conectado a Firebase
-                icon: const Icon(Icons.save, color: Colors.white),
-                label: const Text("REGISTRAR COMPRA", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold))
+                onPressed: _estaGuardando ? null : _guardarCompra, // <--- Bloquea si está cargando
+                icon: _estaGuardando 
+                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                    : const Icon(Icons.save, color: Colors.white),
+                label: Text(
+                  _estaGuardando ? "GUARDANDO..." : "REGISTRAR COMPRA", 
+                  style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)
+                )
               ),
             ),
             const SizedBox(height: 20),
@@ -206,12 +258,11 @@ class _VistaCompraGrupalState extends State<VistaCompraGrupal> {
     );
   }
 
-  // Modificado para aceptar controladores y detectar cambios (onChanged)
   Widget _campoTexto(String label, IconData icono, TextInputType tipo, TextEditingController controlador, {Function(String)? alCambiar}) {
     return TextField(
       controller: controlador,
       keyboardType: tipo,
-      onChanged: alCambiar, // Permite ejecutar funciones al escribir
+      onChanged: alCambiar,
       decoration: InputDecoration(
         labelText: label,
         prefixIcon: Icon(icono, color: Colors.grey),

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart'; // <--- Importamos Firebase
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class VistaStockAlimentos extends StatefulWidget {
   const VistaStockAlimentos({super.key});
@@ -10,207 +10,212 @@ class VistaStockAlimentos extends StatefulWidget {
 
 class _VistaStockAlimentosState extends State<VistaStockAlimentos> {
   final Color naranjaInventario = const Color(0xFFEF6C00);
-  
-  // Controlador para atrapar lo que escribes en la barra de búsqueda
   String _textoBusqueda = "";
 
-  // Pequeña función para ponerle un icono bonito dependiendo del nombre del insumo
+  // Lógica de iconos mejorada
   IconData _obtenerIcono(String nombre) {
     String n = nombre.toLowerCase();
-    if (n.contains('maiz') || n.contains('grano')) return Icons.grain;
-    if (n.contains('alfalfa') || n.contains('pasto')) return Icons.grass;
-    if (n.contains('liquido') || n.contains('agua') || n.contains('melaza')) return Icons.water_drop;
-    if (n.contains('sal') || n.contains('mineral')) return Icons.eco;
-    return Icons.inventory_2; // Icono por defecto de la caja
+    if (n.contains('maiz') || n.contains('grano') || n.contains('sorgo')) return Icons.grain;
+    if (n.contains('alfalfa') || n.contains('pasto') || n.contains('paca')) return Icons.grass;
+    if (n.contains('liq') || n.contains('agua') || n.contains('mela')) return Icons.water_drop;
+    if (n.contains('sal') || n.contains('minera')) return Icons.eco;
+    if (n.contains('vacu') || n.contains('medi') || n.contains('dosis')) return Icons.medication;
+    return Icons.inventory_2; 
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F7FA),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(25),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // --- HEADER ---
-            Row(
+      backgroundColor: const Color(0xFFF8FAFC), // Un gris más profesional y limpio
+      body: Column(
+        children: [
+          // --- HEADER FIJO (No se oculta al hacer scroll) ---
+          Container(
+            padding: const EdgeInsets.only(top: 60, left: 25, right: 25, bottom: 20),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10)],
+            ),
+            child: Column(
               children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(color: naranjaInventario.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
-                  child: Icon(Icons.inventory_2, color: naranjaInventario, size: 32),
-                ),
-                const SizedBox(width: 15),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                Row(
                   children: [
-                    Text("CONTROL DE STOCK", style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: naranjaInventario)),
-                    const Text("Niveles de insumos en tiempo real", style: TextStyle(color: Colors.grey, fontSize: 12)),
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: naranjaInventario.withOpacity(0.1), 
+                        borderRadius: BorderRadius.circular(10)
+                      ),
+                      child: Icon(Icons.inventory_2, color: naranjaInventario, size: 30),
+                    ),
+                    const SizedBox(width: 15),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text("CONTROL DE STOCK", style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: naranjaInventario)),
+                        const Text("Niveles de insumos en tiempo real", style: TextStyle(color: Colors.grey, fontSize: 12)),
+                      ],
+                    ),
                   ],
+                ),
+                const SizedBox(height: 20),
+                
+                // BARRA DE BÚSQUEDA REDISEÑADA
+                TextField(
+                  onChanged: (valor) => setState(() => _textoBusqueda = valor.toLowerCase()),
+                  decoration: InputDecoration(
+                    hintText: "Buscar insumo...",
+                    prefixIcon: const Icon(Icons.search, size: 20),
+                    filled: true,
+                    fillColor: const Color(0xFFF1F5F9),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none),
+                    contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                  ),
                 ),
               ],
             ),
-            
-            const SizedBox(height: 25),
+          ),
 
-            // --- BARRA DE BÚSQUEDA VIVA ---
-            TextField(
-              onChanged: (valor) {
-                // Cada que escribes una letra, la pantalla se actualiza para filtrar
-                setState(() {
-                  _textoBusqueda = valor.toLowerCase();
-                });
-              },
-              decoration: InputDecoration(
-                hintText: "Buscar producto...",
-                prefixIcon: const Icon(Icons.search, color: Colors.grey),
-                filled: true, fillColor: Colors.white,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 20),
-              ),
-            ),
-
-            const SizedBox(height: 30),
-            const Text("Almacén Principal", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.black54)),
-            const SizedBox(height: 15),
-
-            // --- LISTA DE PRODUCTOS CONECTADA A FIREBASE (TIEMPO REAL) ---
-            StreamBuilder<QuerySnapshot>(
-              // Apuntamos a la colección 'inventario'
+          // --- LISTA DINÁMICA CONECTADA A FIREBASE ---
+          Expanded(
+            child: StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance.collection('inventario').snapshots(),
               builder: (context, snapshot) {
-                // 1. Mientras va a internet a buscar los datos
+                if (snapshot.hasError) return const Center(child: Text("Error al cargar datos"));
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
                 }
 
-                // 2. Si la base de datos está vacía (¡Como pasará ahorita!)
                 if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                  return Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(40.0),
-                      child: Text(
-                        "Tu inventario está vacío.\nVe a 'Comprar Producto' para agregar insumos a tu bodega.",
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.grey[500], fontSize: 16),
-                      ),
-                    ),
-                  );
+                  return _pantallaVacia();
                 }
 
-                // 3. Si hay datos, los filtramos con lo que escribiste en la búsqueda
+                // Filtrado por texto de búsqueda
                 var productos = snapshot.data!.docs.where((doc) {
-                  var datos = doc.data() as Map<String, dynamic>;
-                  String nombre = (datos['nombre'] ?? '').toString().toLowerCase();
-                  return nombre.contains(_textoBusqueda);
+                  var d = doc.data() as Map<String, dynamic>;
+                  return (d['nombre'] ?? '').toString().toLowerCase().contains(_textoBusqueda);
                 }).toList();
 
                 if (productos.isEmpty) {
-                  return const Center(child: Text("No se encontraron productos con ese nombre."));
+                  return const Center(child: Padding(
+                    padding: EdgeInsets.all(20.0),
+                    child: Text("No hay coincidencias con tu búsqueda.", style: TextStyle(color: Colors.grey)),
+                  ));
                 }
 
-                // 4. Dibujamos tus tarjetas bonitas con los datos de la nube
-                return Column(
-                  children: productos.map((documento) {
-                    var datos = documento.data() as Map<String, dynamic>;
-                    
+                return ListView.builder(
+                  padding: const EdgeInsets.all(25),
+                  itemCount: productos.length,
+                  itemBuilder: (context, index) {
+                    var datos = productos[index].data() as Map<String, dynamic>;
                     return _itemStock(
                       datos['nombre'] ?? 'Sin nombre',
-                      _obtenerIcono(datos['nombre'] ?? ''), // Le asigna icono automático
+                      _obtenerIcono(datos['nombre'] ?? ''),
                       (datos['cantidad_actual'] ?? 0).toDouble(),
-                      (datos['capacidad_maxima'] ?? 100).toDouble(), // Evita errores si no hay máximo
+                      (datos['capacidad_maxima'] ?? 1000).toDouble(),
                       datos['unidad'] ?? 'Und'
                     );
-                  }).toList(),
+                  },
                 );
               },
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
-  // --- WIDGET PERSONALIZADO PARA CADA ITEM (INTACTO) ---
-  Widget _itemStock(String nombre, IconData icono, double actual, double maximo, String unidad) {
-    // Protección de seguridad por si el máximo llega en cero desde la base de datos
-    if (maximo <= 0) maximo = 1; 
+  // --- DISEÑO CUANDO EL INVENTARIO ESTÁ VACÍO ---
+  Widget _pantallaVacia() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.inventory_outlined, size: 80, color: Colors.grey[300]),
+          const SizedBox(height: 15),
+          Text(
+            "Tu bodega está vacía.\nRegistra una compra para ver el stock.",
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.grey[500], fontSize: 16),
+          ),
+        ],
+      ),
+    );
+  }
 
-    // Cálculo del porcentaje (0.0 a 1.0)
-    double porcentaje = actual / maximo;
-    if (porcentaje > 1.0) porcentaje = 1.0; // Evita que la barra gráfica explote si te pasas del máximo
+  // --- TARJETA VISUAL DE CADA PRODUCTO ---
+  Widget _itemStock(String nombre, IconData icono, double actual, double maximo, String unidad) {
+    if (maximo <= 0) maximo = 1; 
     
-    // Lógica del Semáforo
+    // Cálculo de porcentaje con límite del 100% para evitar errores visuales
+    double porcentaje = (actual / maximo).clamp(0.0, 1.0);
+    
+    // Semáforo Inteligente
     Color colorBarra = Colors.green;
-    String estado = "Óptimo";
-    
-    if (porcentaje <= 0.50) {
-      colorBarra = Colors.orange;
-      estado = "Medio";
-    }
-    if (porcentaje <= 0.20) {
-      colorBarra = Colors.red;
-      estado = "Crítico";
-    }
+    String estado = "ÓPTIMO";
+    if (porcentaje <= 0.50) { colorBarra = Colors.orange; estado = "MEDIO"; }
+    if (porcentaje <= 0.20) { colorBarra = Colors.red; estado = "CRÍTICO"; }
 
     return Container(
       margin: const EdgeInsets.only(bottom: 20),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 15, offset: const Offset(0, 8))],
       ),
       child: Column(
         children: [
-          // Fila Superior: Icono y Nombre
+          // Fila Superior
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(8)),
-                child: Icon(icono, color: Colors.black54),
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(color: const Color(0xFFF1F5F9), borderRadius: BorderRadius.circular(12)),
+                child: Icon(icono, color: Colors.blueGrey, size: 24),
               ),
               const SizedBox(width: 15),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(nombre, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                    Text("$estado · Capacidad: ${maximo.toInt()} $unidad", style: TextStyle(color: Colors.grey[500], fontSize: 12)),
+                    Text(nombre.toUpperCase(), style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15, letterSpacing: 0.5)),
+                    Text("$estado · Máx: ${maximo.toInt()} $unidad", style: TextStyle(color: Colors.grey[500], fontSize: 11, fontWeight: FontWeight.bold)),
                   ],
                 ),
               ),
-              // Porcentaje grande a la derecha
-              Text(
-                "${(porcentaje * 100).toInt()}%", 
-                style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: colorBarra)
+              Text("${(porcentaje * 100).toInt()}%", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: colorBarra)),
+            ],
+          ),
+          const SizedBox(height: 18),
+          
+          // BARRA DE PROGRESO ANIMADA Y CON DEGRADADO
+          Stack(
+            children: [
+              Container(
+                height: 12,
+                decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(10)),
+              ),
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 800),
+                height: 12,
+                width: (MediaQuery.of(context).size.width - 90) * porcentaje,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(colors: [colorBarra, colorBarra.withOpacity(0.7)]),
+                  borderRadius: BorderRadius.circular(10),
+                  boxShadow: [BoxShadow(color: colorBarra.withOpacity(0.3), blurRadius: 5, offset: const Offset(0, 2))],
+                ),
               ),
             ],
           ),
+          const SizedBox(height: 12),
           
-          const SizedBox(height: 15),
-
-          // Barra de Progreso
-          ClipRRect(
-            borderRadius: BorderRadius.circular(10),
-            child: LinearProgressIndicator(
-              value: porcentaje,
-              color: colorBarra,
-              backgroundColor: Colors.grey[200],
-              minHeight: 10,
-            ),
-          ),
-          
-          const SizedBox(height: 8),
-
-          // Texto de cantidades debajo de la barra
+          // Fila Inferior
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text("Disponible:", style: TextStyle(fontSize: 12, color: Colors.grey[600])),
-              Text("${actual.toInt()} $unidad", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+              const Text("Existencia actual:", style: TextStyle(fontSize: 12, color: Colors.black54, fontWeight: FontWeight.w500)),
+              Text("${actual.toInt()} $unidad", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14, color: colorBarra)),
             ],
           )
         ],

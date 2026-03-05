@@ -4,7 +4,6 @@ import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 
 // --- TUS IMPORTACIONES DE VISTAS ---
-// Asegúrate de que estas rutas sean correctas en tu proyecto
 import 'ui/vistas/dashboard/dashboard_inicio.dart';
 import 'ui/vistas/ganado/manejo_ganado.dart';
 import 'ui/vistas/ganado/compra_grupal.dart';
@@ -12,22 +11,19 @@ import 'ui/vistas/ganado/salida_venta.dart';
 import 'ui/vistas/inventario/stock_alimentos.dart';
 import 'ui/vistas/inventario/comprar_producto.dart';
 import 'ui/widgets/agrobot_chat.dart';
-
-// --- IMPORTACIÓN DEL MAPA (CORREGIDA) ---
-// Esta ruta asume que guardaste el archivo del mapa en: lib/ui/vistas/mapa/mapa_ganado.dart
 import 'ui/vistas/mapa/mapa_ganado.dart'; 
+
+// --- IMPORTACIÓN DE DOCS ---
+import 'ui/vistas/Docs/Docs.dart';
 
 // --- MOTOR DE ARRANQUE CON FIREBASE ---
 void main() async {
-  // 1. Asegura que Flutter esté listo
   WidgetsFlutterBinding.ensureInitialized(); 
   
-  // 2. Enciende Firebase con tus credenciales
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
   
-  // 3. Arranca tu aplicación
   runApp(const AgroControlApp());
 }
 
@@ -36,7 +32,6 @@ class AgroControlApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Color principal de la marca
     final Color azulAgro = const Color(0xFF01579B);
 
     return MaterialApp(
@@ -46,7 +41,6 @@ class AgroControlApp extends StatelessWidget {
         useMaterial3: true,
         colorScheme: ColorScheme.fromSeed(seedColor: azulAgro),
         scaffoldBackgroundColor: const Color(0xFFF5F7FA),
-        // Tema global para la AppBar
         appBarTheme: AppBarTheme(
           backgroundColor: azulAgro,
           foregroundColor: Colors.white,
@@ -69,17 +63,14 @@ class PantallaPrincipal extends StatefulWidget {
 class _PantallaPrincipalState extends State<PantallaPrincipal> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   
-  // Estado que controla qué vista se muestra
   String _vistaActual = "INICIO";
   
   final Color azulAgro = const Color(0xFF01579B);
 
-  // Función para cambiar la vista desde el menú
   void _cambiarVista(String vista) {
     setState(() {
       _vistaActual = vista;
     });
-    // Cierra el drawer si estamos en móvil
     if (_scaffoldKey.currentState != null && _scaffoldKey.currentState!.isDrawerOpen) {
       _scaffoldKey.currentState!.closeDrawer();
     }
@@ -89,13 +80,11 @@ class _PantallaPrincipalState extends State<PantallaPrincipal> {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        // Detectamos si es pantalla móvil (menos de 850px)
         bool esMovil = constraints.maxWidth < 850;
 
         return Scaffold(
           key: _scaffoldKey,
           
-          // AppBar solo visible en móvil
           appBar: esMovil 
               ? AppBar(
                   title: const Text("AGROCONTROL", style: TextStyle(fontWeight: FontWeight.bold)),
@@ -106,7 +95,6 @@ class _PantallaPrincipalState extends State<PantallaPrincipal> {
                 )
               : null,
 
-          // Menú lateral desplegable (solo móvil)
           drawer: esMovil 
               ? Drawer(
                   child: MenuLateralInterno(
@@ -116,7 +104,6 @@ class _PantallaPrincipalState extends State<PantallaPrincipal> {
                 )
               : null,
 
-          // Botón flotante del Chatbot (Agrobot)
           floatingActionButton: FloatingActionButton(
             backgroundColor: azulAgro,
             child: const Icon(Icons.smart_toy, color: Colors.white, size: 30),
@@ -130,17 +117,14 @@ class _PantallaPrincipalState extends State<PantallaPrincipal> {
             },
           ),
 
-          // Cuerpo principal de la aplicación
           body: Row(
             children: [
-              // Si es escritorio/tablet, mostramos el menú fijo a la izquierda
               if (!esMovil)
                 MenuLateralInterno(
                   vistaActual: _vistaActual,
                   onOpcionSeleccionada: _cambiarVista,
                 ),
               
-              // Área de contenido dinámico
               Expanded(
                 child: Container(
                   padding: EdgeInsets.zero,
@@ -154,26 +138,26 @@ class _PantallaPrincipalState extends State<PantallaPrincipal> {
     );
   }
 
-  // Selector de Vistas (Aquí estaba el error anterior)
+  // --- RUTEADOR DE VISTAS ---
   Widget _seleccionarVista() {
     switch (_vistaActual) {
       case "INICIO":           return const VistaDashboardInicio();
       case "Manejo De Ganado": return const VistaManejoGanado();
       case "Compra Grupal":    return const VistaCompraGrupal();
       case "Salida Por Venta": return const VistaSalidaVenta();
-      
-      // --- CORRECCIÓN: Usamos la clase MapaGanado ---
       case "Mapa General":     return const MapaGanado(); 
-      
       case "Stock Alimentos":  return const VistaStockAlimentos();
       case "Comprar Producto": return const VistaComprarProducto();
+      case "Docs":             return const VistaTramitesVentanilla(); 
       
       default: return const VistaDashboardInicio();
     }
   }
 }
 
-// Widget del Menú Lateral (Reutilizable)
+// ====================================================
+// WIDGET DEL MENÚ LATERAL
+// ====================================================
 class MenuLateralInterno extends StatefulWidget {
   final Function(String) onOpcionSeleccionada;
   final String vistaActual;
@@ -189,11 +173,11 @@ class MenuLateralInterno extends StatefulWidget {
 }
 
 class _MenuLateralInternoState extends State<MenuLateralInterno> {
-  // Controla qué grupo del menú está desplegado
   String _menuDesplegado = "Ganado";
   
   final Color azulAgro = const Color(0xFF01579B);
   final Color naranjaInventario = const Color(0xFFEF6C00);
+  final Color rojoAdministracion = const Color(0xFFD32F2F); 
 
   @override
   Widget build(BuildContext context) {
@@ -203,7 +187,6 @@ class _MenuLateralInternoState extends State<MenuLateralInterno> {
       child: Column(
         children: [
           const SizedBox(height: 40),
-          // Logo / Título del Menú
           Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -229,29 +212,48 @@ class _MenuLateralInternoState extends State<MenuLateralInterno> {
           const SizedBox(height: 20),
           const Divider(),
 
-          // Lista de opciones del menú
           Expanded(
             child: ListView(
               padding: EdgeInsets.zero,
               children: [
-                // --- GRUPO GANADO ---
+                // --- 1. GRUPO GANADO ---
                 _buildTituloMenu("Ganado", Icons.grass, azulAgro),
                 if (_menuDesplegado == "Ganado") ...[
-                  // Opción para abrir el Mapa
                   _btnSubMenu("Mapa General", icon: Icons.map_outlined),
                   _btnSubMenu("Manejo De Ganado"),
                   _btnSubMenu("Compra Grupal"),
                   _btnSubMenu("Salida Por Venta"),
                 ],
 
-                // --- GRUPO INVENTARIO ---
+                // --- 2. GRUPO INVENTARIO ---
                 _buildTituloMenu("Inventario", Icons.inventory_2, naranjaInventario),
                 if (_menuDesplegado == "Inventario") ...[
                   _btnSubMenu("Stock Alimentos"),
                   _btnSubMenu("Comprar Producto"),
                 ],
-                
-                // --- OPCIÓN INICIO ---
+
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 20),
+                  child: Divider(height: 30),
+                ),
+
+                // --- 3. BOTÓN SUELTO DE DOCS ---
+                ListTile(
+                  leading: Icon(
+                    Icons.folder_shared, 
+                    color: widget.vistaActual == "Docs" ? rojoAdministracion : Colors.grey
+                  ),
+                  title: Text(
+                    "Trámites (Docs)", 
+                    style: TextStyle(
+                      fontWeight: widget.vistaActual == "Docs" ? FontWeight.bold : FontWeight.normal,
+                      color: widget.vistaActual == "Docs" ? rojoAdministracion : Colors.black87
+                    )
+                  ),
+                  onTap: () => widget.onOpcionSeleccionada("Docs"), 
+                ),
+
+                // --- 4. OPCIÓN INICIO ---
                 ListTile(
                   leading: const Icon(Icons.dashboard, color: Colors.grey),
                   title: const Text("Tablero Inicio", style: TextStyle(fontWeight: FontWeight.bold)),
@@ -265,7 +267,6 @@ class _MenuLateralInternoState extends State<MenuLateralInterno> {
     );
   }
 
-  // Widget auxiliar para títulos de sección (con flechita)
   Widget _buildTituloMenu(String titulo, IconData icono, Color color) {
     bool desplegado = _menuDesplegado == titulo;
     return ListTile(
@@ -282,10 +283,11 @@ class _MenuLateralInternoState extends State<MenuLateralInterno> {
     );
   }
 
-  // Widget auxiliar para los botones de submenú
   Widget _btnSubMenu(String titulo, {IconData? icon}) {
     bool activo = widget.vistaActual == titulo;
-    Color colorActivo = _menuDesplegado == "Inventario" ? naranjaInventario : azulAgro;
+    
+    Color colorActivo = azulAgro; 
+    if (_menuDesplegado == "Inventario") colorActivo = naranjaInventario;
     
     return Container(
       color: activo ? colorActivo.withOpacity(0.1) : Colors.transparent,
