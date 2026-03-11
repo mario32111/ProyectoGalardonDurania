@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // <--- IMPORTAMOS FIREBASE
 
 class VistaTramitesVentanilla extends StatefulWidget {
   const VistaTramitesVentanilla({super.key});
@@ -11,31 +12,7 @@ class _VistaTramitesVentanillaState extends State<VistaTramitesVentanilla> {
   final Color azulAgro = const Color(0xFF01579B);
   String _filtroActual = "Todos";
 
-  // Lista de datos simulados 
-  List<Map<String, dynamic>> _tramitesSimulados = [
-    {
-      'folio': 'TRM-849302',
-      'tipo_tramite': 'Actualización de UPP',
-      'fecha_solicitud': '03/03/2026',
-      'estado': 'En revisión',
-      'observaciones': 'Documentos en proceso de validación por el técnico.'
-    },
-    {
-      'folio': 'TRM-102938',
-      'tipo_tramite': 'Guía de Tránsito',
-      'fecha_solicitud': '28/02/2026',
-      'estado': 'Listo para recoger',
-      'observaciones': 'Pase a ventanilla 2 con su identificación.'
-    },
-    {
-      'folio': 'TRM-552199',
-      'tipo_tramite': 'Alta de Aretes SINIIGA',
-      'fecha_solicitud': '04/03/2026',
-      'estado': 'Requiere corrección',
-      'observaciones': 'Falta la copia de la INE del propietario. Favor de adjuntar.'
-    }
-  ];
-
+  // --- LÓGICA DE ESTILOS SEGÚN EL ESTADO DEL TRÁMITE ---
   Map<String, dynamic> _obtenerEstiloEstado(String estado) {
     switch (estado.toLowerCase()) {
       case 'recibido en ventanilla': return {'color': Colors.orange, 'icono': Icons.inbox, 'paso': 0};
@@ -48,7 +25,7 @@ class _VistaTramitesVentanillaState extends State<VistaTramitesVentanilla> {
   }
 
   // ==========================================================
-  // FORMULARIO VISUAL DE SOLICITUD
+  // FORMULARIO VISUAL CONECTADO A FIREBASE
   // ==========================================================
   void _mostrarFormularioNuevoTramite(BuildContext mainContext) {
     String? tipoSeleccionado;
@@ -83,7 +60,7 @@ class _VistaTramitesVentanillaState extends State<VistaTramitesVentanilla> {
                         IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(modalContext)),
                       ],
                     ),
-                    const Text("Módulo Frontend - Diseño de Interfaz", style: TextStyle(color: Colors.grey)),
+                    const Text("La solicitud se enviará a la asociación ganadera.", style: TextStyle(color: Colors.grey)),
                     const SizedBox(height: 25),
 
                     const Text("¿Qué documento necesitas?", style: TextStyle(fontWeight: FontWeight.bold)),
@@ -125,6 +102,7 @@ class _VistaTramitesVentanillaState extends State<VistaTramitesVentanilla> {
 
                     const SizedBox(height: 30),
 
+                    // --- BOTÓN CONECTADO A FIREBASE ---
                     SizedBox(
                       width: double.infinity,
                       height: 55,
@@ -143,28 +121,36 @@ class _VistaTramitesVentanillaState extends State<VistaTramitesVentanilla> {
                             guardando = true;
                           });
 
-                          // Simulación de carga (Fake Backend delay)
-                          await Future.delayed(const Duration(seconds: 2));
+                          try {
+                            // Generamos un folio aleatorio simple (ej. TRM-8492)
+                            String folioGenerado = 'TRM-${(1000 + (DateTime.now().millisecondsSinceEpoch % 9000)).toString()}';
+                            
+                            // Formateamos la fecha actual manualmente para no meter más librerías (DD/MM/YYYY)
+                            DateTime hoy = DateTime.now();
+                            String fechaFormateada = "${hoy.day.toString().padLeft(2, '0')}/${hoy.month.toString().padLeft(2, '0')}/${hoy.year}";
 
-                          if (!mainContext.mounted) return;
-
-                          // Agregamos el trámite a la lista visual
-                          setState(() {
-                            _tramitesSimulados.insert(0, {
-                              'folio': 'TRM-NUEVO',
-                              'tipo_tramite': tipoSeleccionado ?? 'Trámite',
-                              'fecha_solicitud': '05/03/2026',
-                              'estado': 'Recibido en ventanilla', // Siempre inicia aquí
-                              'observaciones': detallesController.text.isEmpty ? 'Solicitud enviada a la asociación.' : detallesController.text,
+                            // GUARDAMOS EN LA COLECCIÓN 'tramites'
+                            await FirebaseFirestore.instance.collection('tramites').add({
+                              'folio': folioGenerado,
+                              'tipo_tramite': tipoSeleccionado,
+                              'fecha_solicitud': fechaFormateada,
+                              'estado': 'Recibido en ventanilla', // Estado inicial por defecto
+                              'observaciones': detallesController.text.isEmpty ? 'Solicitud enviada exitosamente.' : detallesController.text,
+                              'timestamp': FieldValue.serverTimestamp(), // Para ordenarlos del más nuevo al más viejo
                             });
-                          });
-                          
-                          Navigator.pop(mainContext);
-                          ScaffoldMessenger.of(mainContext).showSnackBar(const SnackBar(content: Text('¡UI Actualizada!'), backgroundColor: Colors.green));
+
+                            if (mainContext.mounted) {
+                              Navigator.pop(mainContext);
+                              ScaffoldMessenger.of(mainContext).showSnackBar(const SnackBar(content: Text('¡Trámite enviado con éxito!'), backgroundColor: Colors.green));
+                            }
+                          } catch (e) {
+                            setModalState(() { guardando = false; });
+                            ScaffoldMessenger.of(mainContext).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
+                          }
                         },
                         child: guardando 
                           ? const CircularProgressIndicator(color: Colors.white)
-                          : const Text("SIMULAR ENVÍO", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                          : const Text("ENVIAR SOLICITUD", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
                       ),
                     ),
                     const SizedBox(height: 20),
@@ -180,13 +166,6 @@ class _VistaTramitesVentanillaState extends State<VistaTramitesVentanilla> {
 
   @override
   Widget build(BuildContext context) {
-    List<Map<String, dynamic>> tramitesFiltrados = _tramitesSimulados.where((tramite) {
-      String estado = (tramite['estado'] ?? '').toString().toLowerCase();
-      if (_filtroActual == "En Proceso") return estado != 'listo para recoger' && estado != 'aprobado';
-      if (_filtroActual == "Listos para Recoger") return estado == 'listo para recoger' || estado == 'aprobado';
-      return true;
-    }).toList();
-
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
       
@@ -221,6 +200,7 @@ class _VistaTramitesVentanillaState extends State<VistaTramitesVentanilla> {
             ),
             const SizedBox(height: 25),
 
+            // --- FILTROS ---
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: Row(
@@ -235,22 +215,49 @@ class _VistaTramitesVentanillaState extends State<VistaTramitesVentanilla> {
             ),
             const SizedBox(height: 20),
 
+            // --- LECTOR DE FIREBASE EN TIEMPO REAL ---
             Expanded(
-              child: tramitesFiltrados.isEmpty
-                  ? Center(
+              child: StreamBuilder<QuerySnapshot>(
+                // Leemos la colección ordenando por fecha de creación (los más nuevos arriba)
+                stream: FirebaseFirestore.instance.collection('tramites').orderBy('timestamp', descending: true).snapshots(),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+
+                  if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                    return Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Icon(Icons.folder_open, size: 80, color: Colors.grey[300]),
                           const SizedBox(height: 15),
-                          Text("No hay trámites en esta categoría.", style: TextStyle(color: Colors.grey[500], fontSize: 16)),
+                          Text("No has solicitado ningún trámite.", style: TextStyle(color: Colors.grey[500], fontSize: 16)),
                         ],
                       ),
-                    )
-                  : ListView.builder(
-                      itemCount: tramitesFiltrados.length,
-                      itemBuilder: (context, index) => _tarjetaTramite(tramitesFiltrados[index]),
-                    ),
+                    );
+                  }
+
+                  // Extraemos los datos y aplicamos el filtro de los botones de arriba
+                  var todosLosTramites = snapshot.data!.docs.map((doc) => doc.data() as Map<String, dynamic>).toList();
+                  
+                  List<Map<String, dynamic>> tramitesFiltrados = todosLosTramites.where((tramite) {
+                    String estado = (tramite['estado'] ?? '').toString().toLowerCase();
+                    if (_filtroActual == "En Proceso") return estado != 'listo para recoger' && estado != 'aprobado';
+                    if (_filtroActual == "Listos para Recoger") return estado == 'listo para recoger' || estado == 'aprobado';
+                    return true;
+                  }).toList();
+
+                  if (tramitesFiltrados.isEmpty) {
+                    return Center(child: Text("No hay trámites en esta categoría.", style: TextStyle(color: Colors.grey[500])));
+                  }
+
+                  return ListView.builder(
+                    itemCount: tramitesFiltrados.length,
+                    itemBuilder: (context, index) => _tarjetaTramite(tramitesFiltrados[index]),
+                  );
+                },
+              ),
             ),
           ],
         ),
@@ -297,7 +304,6 @@ class _VistaTramitesVentanillaState extends State<VistaTramitesVentanilla> {
     bool completado = indicePaso <= pasoActual;
     bool actual = indicePaso == pasoActual;
     
-    // Si hay un error y estamos en ese paso, se pinta rojo. Si no, azul o gris.
     Color colorPaso = completado 
         ? (esError && actual ? Colors.red : azulAgro) 
         : Colors.grey[300]!;
@@ -341,7 +347,7 @@ class _VistaTramitesVentanillaState extends State<VistaTramitesVentanilla> {
       child: Container(
         height: 2,
         color: completado ? azulAgro : Colors.grey[200],
-        margin: const EdgeInsets.only(bottom: 20), // Para alinearlo con los círculos
+        margin: const EdgeInsets.only(bottom: 20), 
       ),
     );
   }
@@ -370,7 +376,6 @@ class _VistaTramitesVentanillaState extends State<VistaTramitesVentanilla> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Título y Folio
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -386,13 +391,9 @@ class _VistaTramitesVentanillaState extends State<VistaTramitesVentanilla> {
           Row(children: [const Icon(Icons.calendar_today, size: 14, color: Colors.grey), const SizedBox(width: 5), Text("Iniciado el: ${datos['fecha_solicitud']}", style: const TextStyle(color: Colors.grey, fontSize: 13))]),
           
           const Divider(height: 20),
-
-          // --- AQUÍ INSERTAMOS LA BARRA DE SEGUIMIENTO ---
           _construirBarraSeguimiento(pasoActual, esError),
-
           const Divider(height: 20),
 
-          // Estado actual y Observaciones
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [

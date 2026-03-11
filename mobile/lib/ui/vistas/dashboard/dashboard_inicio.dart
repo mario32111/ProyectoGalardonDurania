@@ -16,6 +16,7 @@ class _VistaDashboardInicioState extends State<VistaDashboardInicio> {
   String _ventasMes = "\$0.00";
 
   List<Map<String, dynamic>> _listaAlertas = [];
+  int _diaGraficaSeleccionado = 3; 
 
   @override
   void initState() {
@@ -101,11 +102,12 @@ class _VistaDashboardInicioState extends State<VistaDashboardInicio> {
   }
 
   // ==============================================================================
-  // FUNCIÓN PARA ABRIR FORMULARIOS Y ENVIAR A FIREBASE
+  // FUNCIÓN PARA ABRIR FORMULARIOS RÁPIDOS 
   // ==============================================================================
   void _abrirAccionRapida(String titulo, IconData icono, Color color, String coleccionBD, String nombreCampo, {bool esNumero = false}) {
     TextEditingController inputController = TextEditingController();
     bool guardando = false;
+    bool archivoAdjunto = false;
 
     showModalBottomSheet(
       context: context,
@@ -128,7 +130,6 @@ class _VistaDashboardInicioState extends State<VistaDashboardInicio> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Encabezado del modal
                     Row(
                       children: [
                         Container(
@@ -146,7 +147,6 @@ class _VistaDashboardInicioState extends State<VistaDashboardInicio> {
                     const Text("Complete la información para registrar en el sistema", style: TextStyle(fontWeight: FontWeight.bold)),
                     const SizedBox(height: 10),
                     
-                    // Campo de texto conectado
                     TextField(
                       controller: inputController,
                       keyboardType: esNumero ? const TextInputType.numberWithOptions(decimal: true) : TextInputType.text,
@@ -158,9 +158,47 @@ class _VistaDashboardInicioState extends State<VistaDashboardInicio> {
                         prefixIcon: Icon(Icons.edit, color: Colors.grey[400]),
                       ),
                     ),
+                    const SizedBox(height: 15),
+
+                    InkWell(
+                      onTap: () {
+                        setModalState(() {
+                          archivoAdjunto = !archivoAdjunto; 
+                        });
+                      },
+                      borderRadius: BorderRadius.circular(12),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 15),
+                        decoration: BoxDecoration(
+                          color: archivoAdjunto ? Colors.green.withOpacity(0.1) : Colors.grey[100],
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: archivoAdjunto ? Colors.green : Colors.transparent),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              archivoAdjunto ? Icons.image : Icons.attach_file, 
+                              color: archivoAdjunto ? Colors.green : Colors.grey[600]
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                archivoAdjunto ? "Evidencia_fotografica.jpg" : "Adjuntar foto o ticket (Opcional)", 
+                                style: TextStyle(
+                                  color: archivoAdjunto ? Colors.green[700] : Colors.grey[600], 
+                                  fontWeight: archivoAdjunto ? FontWeight.bold : FontWeight.normal
+                                )
+                              )
+                            ),
+                            if (archivoAdjunto)
+                              const Icon(Icons.check_circle, color: Colors.green, size: 20),
+                          ],
+                        ),
+                      ),
+                    ),
+
                     const SizedBox(height: 30),
 
-                    // Botón de guardar conectado a Firebase
                     SizedBox(
                       width: double.infinity,
                       height: 55,
@@ -178,25 +216,23 @@ class _VistaDashboardInicioState extends State<VistaDashboardInicio> {
                           setModalState(() { guardando = true; });
 
                           try {
-                            // Preparar el valor a guardar (número o texto)
                             dynamic valorAGuardar = inputController.text.trim();
                             if (esNumero) {
                               valorAGuardar = double.tryParse(valorAGuardar) ?? 0.0;
                             }
 
-                            // GUARDAR EN FIREBASE
                             await FirebaseFirestore.instance.collection(coleccionBD).add({
                               nombreCampo: valorAGuardar,
                               'fecha_registro': FieldValue.serverTimestamp(),
-                              'origen': 'Acceso Rápido Dashboard'
+                              'origen': 'Acceso Rápido Dashboard',
+                              'tiene_evidencia': archivoAdjunto 
                             });
 
                             if (mounted) {
                               Navigator.pop(modalContext);
                               ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('¡Registro guardado en la nube!'), backgroundColor: Colors.green)
+                                const SnackBar(content: Text('¡Registro guardado en la nube!'), backgroundColor: Colors.green)
                               );
-                              // Refrescar el dashboard automáticamente
                               _cargarDatosDeLaNube();
                             }
                           } catch (e) {
@@ -227,7 +263,9 @@ class _VistaDashboardInicioState extends State<VistaDashboardInicio> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        bool esMovil = constraints.maxWidth < 850;
+        bool esMovil = constraints.maxWidth < 650;
+        bool esTablet = constraints.maxWidth >= 650 && constraints.maxWidth < 1100;
+        bool esEscritorio = constraints.maxWidth >= 1100;
 
         if (_estaCargando) {
           return Center(
@@ -249,7 +287,7 @@ class _VistaDashboardInicioState extends State<VistaDashboardInicio> {
             color: azulAgro,
             child: SingleChildScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.all(25),
+              padding: EdgeInsets.all(esMovil ? 20 : 35), 
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -259,12 +297,12 @@ class _VistaDashboardInicioState extends State<VistaDashboardInicio> {
                     children: [
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
-                        children: const [
-                          Text("Resumen General", style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: Color(0xFF263238))),
-                          Text("Rancho en Guadalupe Victoria", style: TextStyle(color: Colors.grey, fontSize: 16)),
+                        children: [
+                          Text("Resumen General", style: TextStyle(fontSize: esMovil ? 24 : 32, fontWeight: FontWeight.w900, color: const Color(0xFF263238))),
+                          const Text("Rancho en Guadalupe Victoria", style: TextStyle(color: Colors.grey, fontSize: 16)),
                         ],
                       ),
-                      if (!esMovil) _widgetClima(),
+                      if (!esMovil) WidgetAnimacionHover(scale: 1.05, child: _widgetClima()),
                     ],
                   ),
                   
@@ -274,34 +312,34 @@ class _VistaDashboardInicioState extends State<VistaDashboardInicio> {
                   if (esMovil)
                     Column(
                       children: [
-                        _widgetClima(),
+                        WidgetAnimacionHover(scale: 1.02, child: _widgetClima()),
                         const SizedBox(height: 20),
-                        _kpiCard("Total Cabezas", _totalCabezas, Icons.grass, azulAgro),
+                        WidgetAnimacionHover(scale: 1.02, child: _kpiCard("Total Cabezas", _totalCabezas, Icons.grass, azulAgro)),
                         const SizedBox(height: 15),
-                        _kpiCard("Alertas de Stock", _alertasStock, Icons.warning_amber_rounded, int.parse(_alertasStock) > 0 ? Colors.red : Colors.orange),
+                        WidgetAnimacionHover(scale: 1.02, child: _kpiCard("Alertas de Stock", _alertasStock, Icons.warning_amber_rounded, int.parse(_alertasStock) > 0 ? Colors.red : Colors.orange)),
                         const SizedBox(height: 15),
-                        _kpiCard("Ventas Acumuladas", _ventasMes, Icons.attach_money, verdeVenta),
+                        WidgetAnimacionHover(scale: 1.02, child: _kpiCard("Ventas Acumuladas", _ventasMes, Icons.attach_money, verdeVenta)),
                       ],
                     )
                   else
                     Row(
                       children: [
-                        Expanded(child: _kpiCard("Total Cabezas", _totalCabezas, Icons.grass, azulAgro)),
+                        Expanded(child: WidgetAnimacionHover(scale: 1.03, child: _kpiCard("Total Cabezas", _totalCabezas, Icons.grass, azulAgro))),
                         const SizedBox(width: 20),
-                        Expanded(child: _kpiCard("Alertas de Stock", _alertasStock, Icons.warning_amber_rounded, int.parse(_alertasStock) > 0 ? Colors.red : Colors.orange)),
+                        Expanded(child: WidgetAnimacionHover(scale: 1.03, child: _kpiCard("Alertas Stock", _alertasStock, Icons.warning_amber_rounded, int.parse(_alertasStock) > 0 ? Colors.red : Colors.orange))),
                         const SizedBox(width: 20),
-                        Expanded(child: _kpiCard("Ventas Acumuladas", _ventasMes, Icons.attach_money, verdeVenta)),
+                        Expanded(child: WidgetAnimacionHover(scale: 1.03, child: _kpiCard("Ventas Acumuladas", _ventasMes, Icons.attach_money, verdeVenta))),
                       ],
                     ),
 
-                  const SizedBox(height: 30),
+                  const SizedBox(height: 40), // Un poco más de espacio antes del título
 
-                  // --- ACCESOS RÁPIDOS (CONECTADOS A BD) ---
+                  // --- ACCESOS RÁPIDOS ---
                   const Text("Accesos Rápidos", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87)),
-                  const SizedBox(height: 15),
-                  _seccionAccesosRapidos(azulAgro),
+                  const SizedBox(height: 20), // Un poco más de espacio antes de los botones
+                  _seccionAccesosRapidos(azulAgro), 
 
-                  const SizedBox(height: 30),
+                  const SizedBox(height: 40), // Un poco más de espacio después de los botones
 
                   // --- ALERTAS REALES Y GRÁFICA ---
                   if (esMovil)
@@ -309,16 +347,25 @@ class _VistaDashboardInicioState extends State<VistaDashboardInicio> {
                       children: [
                         _seccionAlertas(azulAgro),
                         const SizedBox(height: 20),
-                        _seccionGraficaSimulada(),
+                        _seccionGraficaInteractiva(), 
                       ],
                     )
-                  else
+                  else if (esTablet)
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Expanded(flex: 1, child: _seccionAlertas(azulAgro)),
                         const SizedBox(width: 20),
-                        Expanded(flex: 2, child: _seccionGraficaSimulada()),
+                        Expanded(flex: 1, child: _seccionGraficaInteractiva()), 
+                      ],
+                    )
+                  else // esEscritorio
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(flex: 1, child: _seccionAlertas(azulAgro)),
+                        const SizedBox(width: 25),
+                        Expanded(flex: 2, child: _seccionGraficaInteractiva()), 
                       ],
                     ),
                     
@@ -333,77 +380,109 @@ class _VistaDashboardInicioState extends State<VistaDashboardInicio> {
   }
 
   // ==========================================
-  // WIDGETS COMPONENTES
+  // WIDGETS COMPONENTES 
   // ==========================================
 
   Widget _kpiCard(String titulo, String valor, IconData icono, Color color) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () {
+          ScaffoldMessenger.of(context).hideCurrentSnackBar();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Revisando detalles de $titulo...'), duration: const Duration(seconds: 1))
+          );
+        },
         borderRadius: BorderRadius.circular(16),
-        border: Border(left: BorderSide(color: color, width: 5)),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        child: Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border(left: BorderSide(color: color, width: 5)),
+            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 15, offset: const Offset(0, 8))],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(icono, color: color, size: 30),
-              Icon(Icons.more_horiz, color: Colors.grey[300]),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Icon(icono, color: color, size: 30),
+                  Icon(Icons.touch_app, color: Colors.grey[200], size: 20), 
+                ],
+              ),
+              const SizedBox(height: 15),
+              FittedBox( 
+                fit: BoxFit.scaleDown,
+                child: Text(valor, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.black87)),
+              ),
+              Text(titulo, style: TextStyle(fontSize: 14, color: Colors.grey[600]), overflow: TextOverflow.ellipsis),
             ],
           ),
-          const SizedBox(height: 15),
-          Text(valor, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.black87)),
-          Text(titulo, style: TextStyle(fontSize: 14, color: Colors.grey[600])),
-        ],
+        ),
       ),
     );
   }
 
   Widget _widgetClima() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(colors: [Color(0xFF4FC3F7), Color(0xFF0288D1)]),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.blue.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 4))],
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: const [
-          Icon(Icons.wb_sunny, color: Colors.yellow, size: 30),
-          SizedBox(width: 15),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text("28°C Soleado", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
-              Text("Humedad: 40%", style: TextStyle(color: Colors.white70, fontSize: 12)),
-            ],
-          )
-        ],
+    return GestureDetector(
+      onTap: () {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Actualizando clima local...'), backgroundColor: Colors.blue, duration: Duration(seconds: 1))
+        );
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(colors: [Color(0xFF4FC3F7), Color(0xFF0288D1)]),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [BoxShadow(color: Colors.blue.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 4))],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: const [
+            Icon(Icons.wb_sunny, color: Colors.yellow, size: 30),
+            SizedBox(width: 15),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text("28°C Soleado", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                Text("Humedad: 40%", style: TextStyle(color: Colors.white70, fontSize: 12)),
+              ],
+            )
+          ],
+        ),
       ),
     );
   }
 
   Widget _seccionAccesosRapidos(Color colorTema) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceAround,
+    return Wrap(
+      spacing: 35, // <--- AQUÍ AUMENTAMOS LA SEPARACIÓN HORIZONTAL
+      runSpacing: 25, // <--- AQUÍ AUMENTAMOS LA SEPARACIÓN VERTICAL
+      alignment: WrapAlignment.spaceEvenly,
       children: [
-        // AHORA MANDAMOS LA COLECCIÓN Y EL CAMPO A FIREBASE
-        _botonRapido(Icons.add_circle_outline, "Nuevo\nAnimal", colorTema, 
-          () => _abrirAccionRapida("Registrar Nuevo Animal", Icons.pets, colorTema, "ganado", "identificador_arete")),
-        
-        _botonRapido(Icons.local_hospital_outlined, "Reportar\nEnfermedad", Colors.redAccent, 
-          () => _abrirAccionRapida("Reporte Veterinario", Icons.medical_services, Colors.redAccent, "reportes_salud", "descripcion_sintomas")),
-        
-        _botonRapido(Icons.attach_money, "Registrar\nVenta", Colors.green, 
-          () => _abrirAccionRapida("Nueva Venta Rápida", Icons.point_of_sale, Colors.green, "ventas_salidas", "monto_total", esNumero: true)),
-        
-        _botonRapido(Icons.inventory_2_outlined, "Pedir\nInsumos", Colors.orange, 
-          () => _abrirAccionRapida("Solicitar Alimento", Icons.local_shipping, Colors.orange, "pedidos_inventario", "insumo_solicitado")),
+        WidgetAnimacionHover(
+          scale: 1.1,
+          child: _botonRapido(Icons.add_circle_outline, "Nuevo\nAnimal", colorTema, 
+            () => _abrirAccionRapida("Registrar Nuevo Animal", Icons.pets, colorTema, "ganado", "identificador_arete")),
+        ),
+        WidgetAnimacionHover(
+          scale: 1.1,
+          child: _botonRapido(Icons.local_hospital_outlined, "Reportar\nEnfermedad", Colors.redAccent, 
+            () => _abrirAccionRapida("Reporte Veterinario", Icons.medical_services, Colors.redAccent, "reportes_salud", "descripcion_sintomas")),
+        ),
+        WidgetAnimacionHover(
+          scale: 1.1,
+          child: _botonRapido(Icons.attach_money, "Registrar\nVenta", Colors.green, 
+            () => _abrirAccionRapida("Nueva Venta Rápida", Icons.point_of_sale, Colors.green, "ventas_salidas", "monto_total", esNumero: true)),
+        ),
+        WidgetAnimacionHover(
+          scale: 1.1,
+          child: _botonRapido(Icons.inventory_2_outlined, "Pedir\nInsumos", Colors.orange, 
+            () => _abrirAccionRapida("Solicitar Alimento", Icons.local_shipping, Colors.orange, "pedidos_inventario", "insumo_solicitado")),
+        ),
       ],
     );
   }
@@ -418,18 +497,19 @@ class _VistaDashboardInicioState extends State<VistaDashboardInicio> {
         child: Padding(
           padding: const EdgeInsets.all(8.0),
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                padding: const EdgeInsets.all(15),
+                padding: const EdgeInsets.all(18), // Un poquito más grandes los círculos para que destaquen
                 decoration: BoxDecoration(
                   color: Colors.white,
                   shape: BoxShape.circle,
                   boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 5, offset: const Offset(0, 2))],
                 ),
-                child: Icon(icon, color: color, size: 28),
+                child: Icon(icon, color: color, size: 30), // Icono ligeramente más grande
               ),
-              const SizedBox(height: 8),
-              Text(label, textAlign: TextAlign.center, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.black54)),
+              const SizedBox(height: 10),
+              Text(label, textAlign: TextAlign.center, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black54)),
             ],
           ),
         ),
@@ -437,19 +517,25 @@ class _VistaDashboardInicioState extends State<VistaDashboardInicio> {
     );
   }
 
-  Widget _seccionGraficaSimulada() {
+  Widget _seccionGraficaInteractiva() {
     return Container(
       padding: const EdgeInsets.all(25),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)],
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 15, offset: const Offset(0, 8))],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text("Producción (Tendencia Semanal)", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-          const Text("Gráfica proyectada", style: TextStyle(color: Colors.grey, fontSize: 12)),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text("Producción", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+              Icon(Icons.bar_chart, color: Colors.grey[400]),
+            ],
+          ),
+          const Text("Pasa el cursor o toca para ver detalles", style: TextStyle(color: Colors.grey, fontSize: 12)),
           const SizedBox(height: 20),
           SizedBox(
             height: 150,
@@ -457,13 +543,13 @@ class _VistaDashboardInicioState extends State<VistaDashboardInicio> {
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                _barraGrafica("Lun", 0.6),
-                _barraGrafica("Mar", 0.8),
-                _barraGrafica("Mie", 0.7),
-                _barraGrafica("Jue", 0.9, activo: true),
-                _barraGrafica("Vie", 0.5),
-                _barraGrafica("Sab", 0.6),
-                _barraGrafica("Dom", 0.4),
+                _barraGrafica("Lun", 0.6, 0),
+                _barraGrafica("Mar", 0.8, 1),
+                _barraGrafica("Mie", 0.7, 2),
+                _barraGrafica("Jue", 0.9, 3),
+                _barraGrafica("Vie", 0.5, 4),
+                _barraGrafica("Sab", 0.6, 5),
+                _barraGrafica("Dom", 0.4, 6),
               ],
             ),
           )
@@ -472,21 +558,37 @@ class _VistaDashboardInicioState extends State<VistaDashboardInicio> {
     );
   }
 
-  Widget _barraGrafica(String dia, double porcentaje, {bool activo = false}) {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.end,
-      children: [
-        Container(
-          width: 20,
-          height: 100 * porcentaje,
-          decoration: BoxDecoration(
-            color: activo ? const Color(0xFF01579B) : Colors.grey[200],
-            borderRadius: BorderRadius.circular(5),
-          ),
+  Widget _barraGrafica(String dia, double porcentaje, int index) {
+    bool activo = _diaGraficaSeleccionado == index;
+    
+    return MouseRegion(
+      onEnter: (_) => setState(() => _diaGraficaSeleccionado = index),
+      child: GestureDetector(
+        onTap: () => setState(() => _diaGraficaSeleccionado = index), 
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            if (activo)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 5),
+                child: Text("${(porcentaje * 100).toInt()}%", style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF01579B))),
+              ),
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeOutCubic,
+              width: activo ? 24 : 20, 
+              height: activo ? (100 * porcentaje) + 10 : 100 * porcentaje, 
+              decoration: BoxDecoration(
+                color: activo ? const Color(0xFF01579B) : Colors.grey[200],
+                borderRadius: BorderRadius.circular(5),
+                boxShadow: activo ? [BoxShadow(color: const Color(0xFF01579B).withOpacity(0.4), blurRadius: 8, offset: const Offset(0, 4))] : [],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(dia, style: TextStyle(fontSize: 12, fontWeight: activo ? FontWeight.bold : FontWeight.normal, color: activo ? Colors.black : Colors.grey)),
+          ],
         ),
-        const SizedBox(height: 8),
-        Text(dia, style: TextStyle(fontSize: 12, color: activo ? Colors.black : Colors.grey)),
-      ],
+      ),
     );
   }
 
@@ -496,7 +598,7 @@ class _VistaDashboardInicioState extends State<VistaDashboardInicio> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)],
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 15, offset: const Offset(0, 8))],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -516,7 +618,10 @@ class _VistaDashboardInicioState extends State<VistaDashboardInicio> {
               case 'info': colorAlerta = Colors.green; break;
               default: colorAlerta = colorTema;
             }
-            return _alertaItem(alerta['titulo'], alerta['mensaje'], colorAlerta);
+            return WidgetAnimacionHover( 
+              scale: 1.02,
+              child: _alertaItem(alerta['titulo'], alerta['mensaje'], colorAlerta)
+            );
           }).toList(),
         ],
       ),
@@ -540,6 +645,37 @@ class _VistaDashboardInicioState extends State<VistaDashboardInicio> {
             ),
           )
         ],
+      ),
+    );
+  }
+}
+
+// ==============================================================================
+// WIDGET EXTRA PARA CREAR EFECTO "HOVER" AUTOMÁTICO EN WEB/PC
+// ==============================================================================
+class WidgetAnimacionHover extends StatefulWidget {
+  final Widget child;
+  final double scale; 
+
+  const WidgetAnimacionHover({Key? key, required this.child, this.scale = 1.05}) : super(key: key);
+
+  @override
+  State<WidgetAnimacionHover> createState() => _WidgetAnimacionHoverState();
+}
+
+class _WidgetAnimacionHoverState extends State<WidgetAnimacionHover> {
+  bool _estaHover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _estaHover = true),
+      onExit: (_) => setState(() => _estaHover = false),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOutCubic,
+        transform: Matrix4.identity()..scale(_estaHover ? widget.scale : 1.0),
+        child: widget.child,
       ),
     );
   }

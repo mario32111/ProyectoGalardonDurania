@@ -20,6 +20,7 @@ dependencies:
   cloud_firestore: ^5.0.0   # <--- Y ESTA (La base de datos)
   http: ^1.2.0              # Para peticiones HTTP con streaming
   uuid: ^4.5.0              # Para generar session IDs únicos
+  image_picker: ^1.2.1
 
 dev_dependencies:
   flutter_test:

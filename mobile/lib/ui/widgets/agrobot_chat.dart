@@ -1,19 +1,23 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:uuid/uuid.dart';
+import 'package:image_picker/image_picker.dart'; // <--- PAQUETE NUEVO PARA LAS FOTOS
 
 /// Modelo simple para cada mensaje del chat
 class ChatMessage {
   final String emisor; // 'user' o 'bot'
   String texto;
   bool isStreaming; // true mientras se reciben chunks
+  File? imagen; // <--- NUEVO: Soporte para la foto en el chat
 
   ChatMessage({
     required this.emisor,
     required this.texto,
     this.isStreaming = false,
+    this.imagen,
   });
 }
 
@@ -35,15 +39,16 @@ class _AgrobotChatWidgetState extends State<AgrobotChatWidget>
   // ══════════════════════════════════════════════════════════
   //   CONFIGURACIÓN — CAMBIA ESTO A LA URL DE TU SERVIDOR
   // ══════════════════════════════════════════════════════════
-  // Para web (flutter run -d edge/chrome): usa localhost
-  // Para emulador Android: usa 10.0.2.2 en vez de localhost
-  // Para dispositivo físico: usa la IP de tu PC en la red local
   static const String _serverUrl = 'http://localhost:3000';
   // ══════════════════════════════════════════════════════════
 
   late final String _sessionId;
   bool _enviando = false;
   http.Client? _httpClient;
+
+  // --- NUEVAS VARIABLES PARA LA CÁMARA/GALERÍA ---
+  File? _imagenSeleccionada;
+  final ImagePicker _picker = ImagePicker();
 
   // Colores
   final Color azulPrincipal = const Color(0xFF01579B);
@@ -66,7 +71,7 @@ class _AgrobotChatWidgetState extends State<AgrobotChatWidget>
       ChatMessage(
         emisor: 'bot',
         texto:
-            '¡Hola! 👋 Soy **AgroBot**, tu asistente ganadero.\n\nPregúntame lo que necesites sobre el manejo de tu finca.',
+            '¡Hola! 👋 Soy **AgroBot**, tu asistente ganadero.\n\nPregúntame lo que necesites o **adjunta una foto** para analizarla.',
       ),
     );
   }
@@ -81,23 +86,47 @@ class _AgrobotChatWidgetState extends State<AgrobotChatWidget>
   }
 
   // ═══════════════════════════════════════════════════════════
-  //  ENVIAR MENSAJE CON STREAMING SSE
+  //  FUNCIONES PARA IMAGEN Y ENVÍO DE MENSAJES
   // ═══════════════════════════════════════════════════════════
+
+  // Abre la galería y guarda la foto
+  Future<void> _seleccionarImagen() async {
+    final XFile? foto = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 70);
+    
+    if (foto != null) {
+      setState(() {
+        _imagenSeleccionada = File(foto.path);
+      });
+    }
+  }
 
   Future<void> _enviarMensaje([String? textoDirecto]) async {
     final texto = textoDirecto ?? _controller.text.trim();
-    if (texto.isEmpty || _enviando) return;
+    
+    // Ahora validamos que haya texto O que haya una imagen seleccionada
+    if ((texto.isEmpty && _imagenSeleccionada == null) || _enviando) return;
+
+    final imagenAEnviar = _imagenSeleccionada;
+    String? base64Image;
+
+    // Convertir imagen a texto base64 para el backend
+    if (imagenAEnviar != null) {
+      final bytes = await imagenAEnviar.readAsBytes();
+      base64Image = base64Encode(bytes);
+    }
 
     _controller.clear();
-    _focusNode.requestFocus();
+    _focusNode.unfocus(); // Esconde el teclado para ver la respuesta
 
     setState(() {
-      // Agregar mensaje del usuario
-      _mensajes.add(ChatMessage(emisor: 'user', texto: texto));
+      _imagenSeleccionada = null; // Limpiamos la vista previa
+      // Agregar mensaje del usuario (con texto y/o foto)
+      _mensajes.add(ChatMessage(emisor: 'user', texto: texto, imagen: imagenAEnviar));
       // Agregar placeholder del bot (se llenará con streaming)
       _mensajes.add(ChatMessage(emisor: 'bot', texto: '', isStreaming: true));
       _enviando = true;
     });
+    
     _moverAlFinal();
 
     try {
@@ -107,7 +136,13 @@ class _AgrobotChatWidgetState extends State<AgrobotChatWidget>
         Uri.parse('$_serverUrl/chatbot/message'),
       );
       request.headers['Content-Type'] = 'application/json';
-      request.body = jsonEncode({'message': texto, 'session_id': _sessionId});
+      
+      // Enviamos el texto y la imagen convertida
+      request.body = jsonEncode({
+        'message': texto,
+        'session_id': _sessionId,
+        'image_base64': base64Image,
+      });
 
       final response = await _httpClient!.send(request);
 
@@ -116,7 +151,7 @@ class _AgrobotChatWidgetState extends State<AgrobotChatWidget>
         return;
       }
 
-      // Leer el stream SSE
+      // Leer el stream SSE (MANTENIDO INTACTO)
       await _leerSSEStream(response.stream);
     } catch (e) {
       _finalizarConError('Error de conexión: $e');
@@ -126,7 +161,7 @@ class _AgrobotChatWidgetState extends State<AgrobotChatWidget>
     }
   }
 
-  /// Procesa el stream SSE línea por línea (igual que readSSEStream en test-audio.html)
+  /// Procesa el stream SSE línea por línea (INTACTO)
   Future<void> _leerSSEStream(http.ByteStream stream) async {
     String buffer = '';
     final botMsg = _mensajes.last;
@@ -190,8 +225,6 @@ class _AgrobotChatWidgetState extends State<AgrobotChatWidget>
                 });
               }
               break;
-
-            // ai_log se ignora en la UI del chat (son logs internos)
           }
         } catch (_) {
           // JSON inválido, ignorar
@@ -253,13 +286,40 @@ class _AgrobotChatWidgetState extends State<AgrobotChatWidget>
           _buildHeader(),
           Expanded(child: _buildChatArea()),
           if (_mensajes.length <= 1) _buildSugerencias(),
+          
+          // --- NUEVO: VISTA PREVIA DE LA FOTO ANTES DE ENVIARLA ---
+          if (_imagenSeleccionada != null)
+            Container(
+              alignment: Alignment.centerLeft,
+              padding: const EdgeInsets.only(left: 20, top: 10),
+              child: Stack(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Image.file(_imagenSeleccionada!, width: 80, height: 80, fit: BoxFit.cover),
+                  ),
+                  Positioned(
+                    right: 0, top: 0,
+                    child: GestureDetector(
+                      onTap: () => setState(() => _imagenSeleccionada = null),
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                        child: const Icon(Icons.close, color: Colors.white, size: 14),
+                      ),
+                    ),
+                  )
+                ],
+              ),
+            ),
+
           _buildInput(),
         ],
       ),
     );
   }
 
-  /// Header con gradiente azul
+  /// Header con gradiente azul (INTACTO)
   Widget _buildHeader() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
@@ -332,7 +392,7 @@ class _AgrobotChatWidgetState extends State<AgrobotChatWidget>
     );
   }
 
-  /// Área de mensajes
+  /// Área de mensajes (INTACTO)
   Widget _buildChatArea() {
     return Container(
       color: fondoGris,
@@ -399,6 +459,17 @@ class _AgrobotChatWidgetState extends State<AgrobotChatWidget>
                   ],
                 ),
               ),
+
+            // --- NUEVO: SI EL MENSAJE TRAE FOTO, LA MOSTRAMOS ---
+            if (msg.imagen != null) 
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8.0),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(10), 
+                  child: Image.file(msg.imagen!)
+                ),
+              ),
+
             // Texto del mensaje
             if (msg.texto.isNotEmpty)
               _buildTextoFormateado(
@@ -413,19 +484,16 @@ class _AgrobotChatWidgetState extends State<AgrobotChatWidget>
     );
   }
 
-  /// Formatea texto básico con negritas (**texto**)
+  /// Formatea texto básico con negritas (**texto**) (INTACTO)
   Widget _buildTextoFormateado(String texto, Color color) {
-    // Parsing simple de **bold**
     final spans = <TextSpan>[];
     final regExp = RegExp(r'\*\*(.*?)\*\*');
     int lastEnd = 0;
 
     for (final match in regExp.allMatches(texto)) {
-      // Texto normal antes del bold
       if (match.start > lastEnd) {
         spans.add(TextSpan(text: texto.substring(lastEnd, match.start)));
       }
-      // Texto en bold
       spans.add(
         TextSpan(
           text: match.group(1),
@@ -434,7 +502,6 @@ class _AgrobotChatWidgetState extends State<AgrobotChatWidget>
       );
       lastEnd = match.end;
     }
-    // Texto restante
     if (lastEnd < texto.length) {
       spans.add(TextSpan(text: texto.substring(lastEnd)));
     }
@@ -447,7 +514,7 @@ class _AgrobotChatWidgetState extends State<AgrobotChatWidget>
     );
   }
 
-  /// Indicador de "typing" con tres puntos animados
+  /// Indicador de "typing" con tres puntos animados (INTACTO)
   Widget _buildStreamingIndicator(bool sinTexto) {
     return Padding(
       padding: EdgeInsets.only(top: sinTexto ? 0 : 8),
@@ -474,7 +541,7 @@ class _AgrobotChatWidgetState extends State<AgrobotChatWidget>
     );
   }
 
-  /// Chips de sugerencias rápidas
+  /// Chips de sugerencias rápidas (INTACTO)
   Widget _buildSugerencias() {
     return Container(
       color: fondoGris,
@@ -497,11 +564,11 @@ class _AgrobotChatWidgetState extends State<AgrobotChatWidget>
     );
   }
 
-  /// Input de texto + botón enviar
+  /// Input de texto + botón de adjuntar + botón enviar
   Widget _buildInput() {
     return Container(
       padding: EdgeInsets.only(
-        left: 16,
+        left: 10, // Un poco menos de espacio a la izquierda para acomodar el clip
         right: 16,
         top: 12,
         bottom: MediaQuery.of(context).viewInsets.bottom + 12,
@@ -518,6 +585,12 @@ class _AgrobotChatWidgetState extends State<AgrobotChatWidget>
       ),
       child: Row(
         children: [
+          // --- NUEVO: BOTÓN DEL CLIP PARA LA GALERÍA ---
+          IconButton(
+            icon: Icon(Icons.attach_file, color: azulPrincipal, size: 26),
+            onPressed: _enviando ? null : _seleccionarImagen,
+          ),
+          
           // Campo de texto
           Expanded(
             child: Container(
@@ -541,6 +614,7 @@ class _AgrobotChatWidgetState extends State<AgrobotChatWidget>
             ),
           ),
           const SizedBox(width: 10),
+          
           // Botón enviar
           GestureDetector(
             onTap: _enviando ? null : () => _enviarMensaje(),
