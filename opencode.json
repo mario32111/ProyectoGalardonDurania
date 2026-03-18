@@ -1,0 +1,27 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": [
+    "AGENTS.md",
+    "backend/AGENTS.md",
+    "mobile/AGENTS.md",
+    "IAService/AGENTS.md",
+    "identification/AGENTS.md",
+    "ESTRUCTURA_BD.md"
+  ],
+  "watcher": {
+    "ignore": [
+      "node_modules/**",
+      "build/**",
+      ".dart_tool/**",
+      ".git/**",
+      "models_whisper/**",
+      "uploads/**",
+      "backend/node_modules/**",
+      "identification/node_modules/**",
+      "mobile/build/**",
+      "mobile/.dart_tool/**",
+      "IAService/__pycache__/**",
+      "IAService/venv/**"
+    ]
+  }
+}
