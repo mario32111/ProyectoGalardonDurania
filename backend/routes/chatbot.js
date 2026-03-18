@@ -6,6 +6,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const speechService = require('../services/speechService');
+const TramitesService = require('../services/tramitesService'); // Import TramitesService here as well for direct use if needed, or ensure it's globally available if not.
 
 // Configurar multer para almacenar archivos de audio temporalmente
 const storage = multer.diskStorage({
@@ -302,6 +303,36 @@ router.post('/audio-chat', upload.single('audio'), async function (req, res, nex
     } else {
       next(error);
     }
+  }
+});
+
+// POST /chatbot/tramite-status - Obtener el estado de un trámite
+router.post('/tramite-status', async function (req, res, next) {
+  try {
+    const { upp, nombreTramite, tramiteId } = req.body; // Recibir los identificadores
+
+    if (!upp && !nombreTramite && !tramiteId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Se requiere al menos el ID del trámite, o la UP P y el nombre/tipo de trámite.'
+      });
+    }
+
+    // Llamar al nuevo método en chatbotService
+    const result = await chatbotService.getTramiteStatus({
+      upp,
+      nombreTramite,
+      tramiteId
+    });
+
+    if (result.success) {
+      res.status(200).json(result);
+    } else {
+      res.status(404).json(result); // O un status code apropiado si el error es diferente
+    }
+  } catch (error) {
+    console.error('Error en POST /chatbot/tramite-status:', error);
+    res.status(500).json({ success: false, message: `Error interno al obtener estado del trámite: ${error.message}` });
   }
 });
 
