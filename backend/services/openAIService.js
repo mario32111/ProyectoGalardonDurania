@@ -2,6 +2,7 @@ const { createAzureClient } = require('../config/azureConfig.js');
 const { db, admin } = require('../config/firebaseConfig.js');
 
 const tramitesService = require('./tramitesService.js');
+const chatbotService = require('./chatbotService.js'); // Import chatbotService
 
 const tools = [
     {
@@ -16,7 +17,7 @@ const tools = [
         type: "function",
         function: {
             name: "consultarTramite",
-            description: "Consulta SIEMPRE el estado y etapa actual de un trámite en la base de datos en tiempo real. OBLIGATORIO usar esta herramienta cada vez que el usuario pregunte por el estado de su trámite, sin importar si ya fue consultado en mensajes anteriores (para obtener datos frescos).",
+            description: "Consulta SIEMPRE el estado y etapa actual de un trámite en la base de datos en tiempo real. OBLIGATORIO usar esta herramienta cada vez que el usuario pregunte por el estado de su trámite, sin importar si ya fue consultado en mensajes anteriores (para obtener datos frescos). Usa esta función SOLO si el usuario proporciona el ID exacto del trámite.",
             parameters: {
                 type: "object",
                 properties: {
@@ -26,6 +27,32 @@ const tools = [
                     }
                 },
                 required: ["tramite_id"]
+            }
+        }
+    },
+    // Nuevo Tool para consultar por UPP, nombre/tipo de trámite
+    {
+        type: "function",
+        function: {
+            name: "consultarEstadoTramitePorFiltros",
+            description: "Consulta el estado y etapa actual de un trámite usando filtros como la UPP, el nombre o tipo de trámite, o el ID. Prioriza el uso de tramiteId si está disponible. Si no, usa upp y nombreTramite. Es OBLIGATORIO usar esta herramienta cada vez que el usuario pregunte por el estado de su trámite para obtener datos frescos.",
+            parameters: {
+                type: "object",
+                properties: {
+                    upp: {
+                        type: "string",
+                        description: "Clave UPP de 12 dígitos. Requerido si no se proporciona tramiteId."
+                    },
+                    nombreTramite: {
+                        type: "string",
+                        description: "Nombre o tipo del trámite (Ej: MOVILIZACION, PRUEBAS_GANADO). Requerido si no se proporciona tramiteId."
+                    },
+                    tramiteId: {
+                        type: "string",
+                        description: "ID o Folio exacto del trámite (Ej: Y0twaLhGCAqHz08DaZtD o TRM-2026-001). Si se proporciona, se usará este como identificador principal."
+                    }
+                },
+                required: [], // Los parámetros son opcionales individualmente, pero se requiere al menos uno para la consulta
             }
         }
     },
@@ -115,6 +142,7 @@ class OpenAIService {
                 - Consultar estatus sanitario de una UPP.
                 - Verificar el progreso de trámites en tiempo real (etapas como Solicitud, Revisión, Inspección, Finalizado).
                 - Crear nuevos folios de trámite directamente en la base de datos de Firebase.
+                - **Consultar el estado de un trámite proporcionando UPP, nombre/tipo de trámite o ID.**
 
                 ### 🛑 REGLAS CRÍTICAS DE OPERACIÓN
                 1. **Foco Exclusivo:** Si el usuario pregunta sobre temas ajenos (política, clima, ventas generales, inventario de alimentos), responde: "Mi especialidad se limita a la gestión de trámites de Sanidad, Movilización y Exportación de la Asociación Ganadera. ¿Cómo puedo ayudarte con tu UPP?".
@@ -127,7 +155,8 @@ class OpenAIService {
                 - Si el usuario proporciona una clave UPP de menos o más de 12 dígitos, indícale que debe ser exactamente de 12 dígitos.
 
                 ### 🎯 OBJETIVO FINAL
-                Transformar la experiencia del productor de un proceso lento y físico a uno digital, transparente y rápido, asegurando que el personal de la asociación reciba expedientes ya validados y completos.`
+                Transformar la experiencia del productor de un proceso lento y físico a uno digital, transparente y rápido, asegurando que el personal de la asociación reciba expedientes ya validados y completos.
+            `
         };
     }
 
@@ -165,7 +194,7 @@ class OpenAIService {
         if (userMessageContent !== "_FUNCTION_RESULT_") {
             messagesForAI.push({
                 role: "system",
-                content: "REGLA ESTRICTA DE SISTEMA: IGNORA TUS RECUERDOS Y EL HISTORIAL AL RESPONDER. Si el usuario te está preguntando por el estado o detalles de un trámite, TIENES LA OBLIGACIÓN de ejecutar la función 'consultarTramite' AHORA MISMO para obtener los datos más recientes de la base de datos. ESTÁ ESTRICTAMENTE PROHIBIDO contestar adivinando o usando información que esté arriba en el historial."
+                content: "REGLA ESTRICTA DE SISTEMA: IGNORA TUS RECUERDOS Y EL HISTORIAL AL RESPONDER. Si el usuario te está preguntando por el estado o detalles de un trámite, TIENES LA OBLIGACIÓN de ejecutar la función 'consultarTramite' o 'consultarEstadoTramitePorFiltros' AHORA MISMO para obtener los datos más recientes de la base de datos. ESTÁ ESTRICTAMENTE PROHIBIDO contestar adivinando o usando información que esté arriba en el historial."
             });
         }
 
@@ -272,8 +301,12 @@ class OpenAIService {
 
                 case "consultarTramite":
                     // Buscamos el trámite real en Firebase mediante el ID
-                    const tramite = await tramitesService.getSeguimiento(args.tramite_id);
-                    return tramite || { error: "Trámite no encontrado" };
+                    const tramiteById = await tramitesService.getSeguimiento(args.tramite_id);
+                    return tramiteById || { error: "Trámite no encontrado" };
+
+                case "consultarEstadoTramitePorFiltros":
+                    // Llamamos al nuevo método en chatbotService
+                    return await chatbotService.getTramiteStatus(args);
 
                 case "crearTramite":
                     // Creamos un trámite real en la colección de trámites
@@ -281,7 +314,7 @@ class OpenAIService {
                     // puedes pasarlo desde la sesión.
                     const nuevoTramite = await tramitesService.create({
                         tipo: args.tipo,
-                        uppId: args.uppId,
+                        uppId: args.uppId, // Asegurarse que el nombre del campo coincida con el servicio de tramites
                         usuario_id: "SISTEMA_CHATBOT", // O el ID real del usuario
                         observaciones: args.observaciones
                     });
