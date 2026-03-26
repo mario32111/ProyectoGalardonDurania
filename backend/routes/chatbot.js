@@ -23,7 +23,12 @@ const upload = multer({
   storage,
   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB máximo
   fileFilter: (req, file, cb) => {
-    const allowedTypes = ['audio/wav', 'audio/wave', 'audio/x-wav', 'audio/mpeg', 'audio/mp3', 'audio/ogg', 'audio/webm', 'audio/mp4'];
+    const allowedTypes = [
+      'audio/wav', 'audio/wave', 'audio/x-wav', 
+      'audio/mpeg', 'audio/mp3', 'audio/ogg', 
+      'audio/webm', 'audio/mp4', 'audio/x-m4a', 'audio/m4a',
+      'application/octet-stream'
+    ];
     if (allowedTypes.includes(file.mimetype)) {
       cb(null, true);
     } else {

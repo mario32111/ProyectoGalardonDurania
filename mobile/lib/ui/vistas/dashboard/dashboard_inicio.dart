@@ -76,10 +76,30 @@ class _VistaDashboardInicioState extends State<VistaDashboardInicio> {
         }
       }
 
-      if (alertasReales.isEmpty) {
+      // ==========================================
+      // ALERTAS DE DEMOSTRACIÓN (Solicitadas)
+      // ==========================================
+      alertasReales.add({
+        "titulo": "Reproducción",
+        "mensaje": "5 vacas detectadas en celo (Lote A)",
+        "tipo": "info"
+      });
+      alertasReales.add({
+        "titulo": "Feria de Salud",
+        "mensaje": "Revisión programada: 3 vacas con posible fiebre",
+        "tipo": "critico"
+      });
+      alertasReales.add({
+        "titulo": "Nutrición",
+        "mensaje": "Baja ingesta detectada en el Corral 3",
+        "tipo": "advertencia"
+      });
+
+      // Si no detectamos alertas críticas de inventario reales, mostramos que está bien
+      if (contadorAlertasCriticas == 0) {
         alertasReales.add({
-          "titulo": "Inventario Sano",
-          "mensaje": "Tienes suficiente alimento y medicinas.",
+          "titulo": "Estado del Inventario",
+          "mensaje": "Todos los insumos se encuentran en niveles óptimos",
           "tipo": "info"
         });
       }
@@ -89,7 +109,7 @@ class _VistaDashboardInicioState extends State<VistaDashboardInicio> {
           _totalCabezas = contadorCabezas.toString();
           _ventasMes = "\$${sumaVentas.toStringAsFixed(2).replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},')}";
           _alertasStock = contadorAlertasCriticas.toString();
-          _listaAlertas = alertasReales.take(5).toList(); 
+          _listaAlertas = alertasReales.take(10).toList(); 
           _estaCargando = false;
         });
       }
@@ -606,7 +626,7 @@ class _VistaDashboardInicioState extends State<VistaDashboardInicio> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: const [
-              Text("⚠️ Avisos de Inventario", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              Text("⚠️ Alertas y Notificaciones", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
             ],
           ),
           const Divider(height: 20),
