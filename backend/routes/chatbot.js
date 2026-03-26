@@ -126,7 +126,7 @@ router.get('/historial', async function (req, res, next) {
 router.get('/sesion/:sesion_id', async function (req, res, next) {
   try {
     const { sesion_id } = req.params;
-    const data = await chatbotService.getSesion(sesion_id);
+    const data = await chatbotService.getSesion(sesion_id, req.user.uid);
 
     if (!data) return res.status(404).json({ success: false, message: 'Sesión no encontrada' });
 
@@ -152,7 +152,7 @@ router.post('/sesion/nueva', async function (req, res, next) {
 router.delete('/sesion/:sesion_id', async function (req, res, next) {
   try {
     const { sesion_id } = req.params;
-    await chatbotService.deleteSesion(sesion_id);
+    await chatbotService.deleteSesion(sesion_id, req.user.uid);
 
     res.status(200).json({
       success: true,
@@ -166,7 +166,7 @@ router.delete('/sesion/:sesion_id', async function (req, res, next) {
 // POST /chatbot/feedback - Enviar feedback sobre una respuesta
 router.post('/feedback', async function (req, res, next) {
   try {
-    const data = await chatbotService.saveFeedback(req.body);
+    const data = await chatbotService.saveFeedback(req.body, req.user.uid);
     res.status(200).json({ success: true, message: 'Feedback recibido', data });
   } catch (error) {
     next(error);
@@ -337,7 +337,7 @@ router.post('/tramite-status', async function (req, res, next) {
       upp,
       nombreTramite,
       tramiteId
-    });
+    }, req.user.uid);
 
     if (result.success) {
       res.status(200).json(result);

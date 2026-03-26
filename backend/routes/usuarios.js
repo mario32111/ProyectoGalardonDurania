@@ -1,42 +1,21 @@
 var express = require('express');
 var router = express.Router();
 const { db } = require('../config/firebaseConfig');
+const axios = require('axios'); // <--- NUEVO: Para llamar a Google Auth API
 
 /**
  * CRUD para Usuarios
  * Gestión de usuarios de la plataforma ganadera
  */
 
-// GET /usuarios - Obtener todos los usuarios
-router.get('/', async function (req, res, next) {
+// GET /usuarios/me - Obtener el perfil del usuario actual (NUEVO)
+router.get('/me', async function (req, res, next) {
   try {
-
-    const snapshot = await db.collection('usuarios').get();
-    const usuarios = snapshot.docs.map(doc => {
-      const data = doc.data();
-      delete data.password; // No devolver contraseñas
-      return { id: doc.id, ...data };
-    });
-
-    res.status(200).json({
-      success: true,
-      message: 'Lista de usuarios',
-      data: usuarios
-    });
-  } catch (error) {
-    next(error);
-  }
-});
-
-// GET /usuarios/:id - Obtener un usuario específico
-router.get('/:id', async function (req, res, next) {
-  try {
-
-    const { id } = req.params;
-    const doc = await db.collection('usuarios').doc(id).get();
+    const userId = req.user.uid;
+    const doc = await db.collection('usuarios').doc(userId).get();
 
     if (!doc.exists) {
-      return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
+      return res.status(404).json({ success: false, message: 'Perfil no encontrado en la base de datos' });
     }
 
     const data = doc.data();
@@ -44,7 +23,7 @@ router.get('/:id', async function (req, res, next) {
 
     res.status(200).json({
       success: true,
-      message: `Usuario con ID: ${id}`,
+      message: 'Tu perfil',
       data: { id: doc.id, ...data }
     });
   } catch (error) {
@@ -52,53 +31,53 @@ router.get('/:id', async function (req, res, next) {
   }
 });
 
-// POST /usuarios - Crear un nuevo usuario
-router.post('/', async function (req, res, next) {
+// GET /usuarios/:id - Obtener detalles (Solo si es tu propio ID)
+router.get('/:id', async function (req, res, next) {
   try {
+    const { id } = req.params;
+    const userId = req.user.uid;
 
-    const data = req.body;
-
-    // Check if email already exists
-    const emailCheck = await db.collection('usuarios').where('email', '==', data.email).get();
-    if (!emailCheck.empty) {
-      return res.status(400).json({ success: false, message: 'El email ya está registrado' });
+    if (id !== userId) {
+      return res.status(403).json({ success: false, message: 'No tienes permiso para ver perfiles ajenos' });
     }
 
-    // TODO: Hash password here in a real app
-    const newUser = {
-      ...data,
-      createdAt: new Date().toISOString()
-    };
+    const doc = await db.collection('usuarios').doc(id).get();
+    if (!doc.exists) return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
 
-    const docRef = await db.collection('usuarios').add(newUser);
+    const data = doc.data();
+    delete data.password;
 
-    delete newUser.password;
-
-    res.status(201).json({
+    res.status(200).json({
       success: true,
-      message: 'Usuario creado exitosamente',
-      data: { id: docRef.id, ...newUser }
+      data: { id: doc.id, ...data }
     });
   } catch (error) {
     next(error);
   }
 });
 
-// PUT /usuarios/:id - Actualizar un usuario
+// PUT /usuarios/:id - Actualizar perfil propio
 router.put('/:id', async function (req, res, next) {
   try {
-
     const { id } = req.params;
-    const data = req.body;
+    const userId = req.user.uid;
 
-    const updateData = { ...data, updatedAt: new Date().toISOString() };
+    if (id !== userId) {
+      return res.status(403).json({ success: false, message: 'Solo puedes actualizar tu propio perfil' });
+    }
+
+    const data = req.body;
+    const updateData = { 
+      ...data, 
+      updatedAt: new Date().toISOString() 
+    };
 
     await db.collection('usuarios').doc(id).update(updateData);
     delete updateData.password;
 
     res.status(200).json({
       success: true,
-      message: `Usuario ${id} actualizado`,
+      message: 'Perfil actualizado',
       data: { id, ...updateData }
     });
   } catch (error) {
@@ -106,60 +85,56 @@ router.put('/:id', async function (req, res, next) {
   }
 });
 
-// DELETE /usuarios/:id - Eliminar un usuario
+// DELETE /usuarios/:id - Eliminar perfil propio
 router.delete('/:id', async function (req, res, next) {
   try {
-
     const { id } = req.params;
+    const userId = req.user.uid;
+
+    if (id !== userId) {
+      return res.status(403).json({ success: false, message: 'No puedes eliminar otros perfiles' });
+    }
 
     await db.collection('usuarios').doc(id).delete();
 
     res.status(200).json({
       success: true,
-      message: `Usuario ${id} eliminado`
+      message: 'Cuenta eliminada exitosamente'
     });
   } catch (error) {
     next(error);
   }
 });
 
-// POST /usuarios/login - Autenticación de usuario
+/**
+ * POST /usuarios/login (Proxy para Desarrollo)
+ */
 router.post('/login', async function (req, res, next) {
   try {
-    const { db } = require('../config/firebaseConfig');
     const { email, password } = req.body;
+    const apiKey = process.env.FIREBASE_WEB_API_KEY;
 
-    // Buscar usuario por email
-    const usersByType = await db.collection('usuarios').where('email', '==', email).limit(1).get();
-
-    if (usersByType.empty) {
-      return res.status(401).json({ success: false, message: 'Credenciales inválidas' });
+    if (!apiKey) {
+      return res.status(500).json({ success: false, message: 'FIREBASE_WEB_API_KEY no definida en .env' });
     }
 
-    const userDoc = usersByType.docs[0];
-    const userData = userDoc.data();
-
-    // Verificación simple (En prod usar bcrypt.compare)
-    if (userData.password !== password) {
-      return res.status(401).json({ success: false, message: 'Credenciales inválidas' });
-    }
-
-    // Retornamos ID del documento como "token" simplificado o usamos custom token
-    // const token = await admin.auth().createCustomToken(userDoc.id);
+    const response = await axios.post(
+      `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${apiKey}`,
+      { email, password, returnSecureToken: true }
+    );
 
     res.status(200).json({
       success: true,
-      message: 'Login exitoso',
-      token: userDoc.id, // En un sistema real, esto sería un JWT
-      user: {
-        id: userDoc.id,
-        email: userData.email,
-        nombre: userData.nombre,
-        rol: userData.rol
-      }
+      token: response.data.idToken,
+      uid: response.data.localId
     });
+
   } catch (error) {
-    next(error);
+    res.status(error.response?.status || 500).json({
+      success: false,
+      message: 'Autenticación fallida',
+      error: error.response?.data?.error?.message || error.message
+    });
   }
 });
 

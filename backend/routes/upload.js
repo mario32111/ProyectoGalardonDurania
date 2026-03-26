@@ -20,51 +20,53 @@ const upload = multer({
  */
 router.post('/', upload.single('file'), async (req, res) => {
     try {
+        const userId = req.user.uid; // Obtenido del token
+
         if (!req.file || !req.body.tramite_id) {
-            return res.status(400).json({ success: false, message: 'Ningún archivo proporcionado.' });
+            return res.status(400).json({ success: false, message: 'Archivo y tramite_id son obligatorios.' });
         }
 
-        // Carpeta destino opcional si se envía por body (ej. "ganado", "usuarios")
-        const folder = req.body.folder || 'uploads';
-        const { tramite_id } = req.body;
+        const { tramite_id, folder = 'uploads' } = req.body;
 
-        // Llamar al servicio
-        const fileUrl = await uploadFile(req.file, folder);
+        // Llamar al servicio para subir a Firebase Storage
+        // Se podría añadir el userId al folder para mayor aislamiento
+        const fileUrl = await uploadFile(req.file, `${userId}/${folder}`);
 
-        if (tramite_id) {
-            // Registrar el documento en el trámite utilizando el servicio
-            await tramitesService.addDocumento(tramite_id, {
-                nombre_documento: req.file.originalname,
-                tipo_documento: req.file.mimetype,
-                url: fileUrl
-            });
+        // Registrar el documento en el trámite (el servicio ya verifica propiedad con userId)
+        await tramitesService.addDocumento(tramite_id, {
+            nombre_documento: req.file.originalname,
+            tipo_documento: req.file.mimetype,
+            url: fileUrl
+        }, userId);
 
-            // Avanzar la etapa del trámite utilizando el servicio
-            await tramitesService.avanzarEtapa(tramite_id, {
-                responsable: req.body.usuario_id || 'Sistema',
-                observaciones: `Documento adjuntado: ${req.file.originalname}`
-            });
-        }
+        // Avanzar la etapa del trámite
+        await tramitesService.avanzarEtapa(tramite_id, {
+            responsable: 'Usuario Autenticado',
+            observaciones: `Documento adjuntado: ${req.file.originalname}`
+        }, userId);
 
         res.status(200).json({
             success: true,
-            message: 'Archivo subido exitosamente.',
+            message: 'Archivo subido y vinculado al trámite exitosamente.',
             url: fileUrl,
         });
     } catch (error) {
         console.error('Error en ruta /upload:', error);
-        res.status(500).json({ success: false, message: 'Error interno del servidor al subir archivo.', error: error.message });
+        const status = error.message.includes('no autorizado') ? 403 : 500;
+        res.status(status).json({ success: false, message: error.message });
     }
 });
 
 /**
  * @route DELETE /upload
- * @desc Elimina un archivo de Firebase Storage por URL
+ * @desc Elimina un archivo de Firebase Storage por URL (se asume que el usuario tiene el permiso si conoce la URL, 
+ *       en una implementación más robusta se verificaría la pertenencia del recurso)
  */
 router.delete('/', async (req, res) => {
     try {
         const { url } = req.body;
-
+        // En un futuro: Verificar que 'url' contiene el '${userId}/' al inicio del path
+        
         if (!url) {
             return res.status(400).json({ success: false, message: 'Se requiere la URL del archivo para eliminar.' });
         }

@@ -42,25 +42,29 @@ class TramitesService {
         return TRAMITE_TYPES;
     }
 
-    async getAll(filters) {
-        let query = db.collection('tramites');
+    async getAll(filters, usuario_id) {
+        let query = db.collection('tramites').where('usuario_id', '==', usuario_id);
+        
         if (filters.tipo) query = query.where('tipo', '==', filters.tipo);
         if (filters.estado) query = query.where('estado', '==', filters.estado);
-        if (filters.usuario_id) query = query.where('usuario_id', '==', filters.usuario_id);
+        if (filters.upp) query = query.where('upp', '==', filters.upp);
 
         const snapshot = await query.get();
         return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     }
 
-    async getById(id) {
+    async getById(id, usuario_id) {
         const doc = await db.collection('tramites').doc(id).get();
         if (!doc.exists) return null;
-        return { id: doc.id, ...doc.data() };
+        
+        const data = doc.data();
+        if (data.usuario_id !== usuario_id) return null; // Verificación de propiedad
+        
+        return { id: doc.id, ...data };
     }
 
-    async getSeguimiento(id) {
-        const doc = await this.getById(id);
-        console.log(doc);
+    async getSeguimiento(id, usuario_id) {
+        const doc = await this.getById(id, usuario_id);
         if (!doc) return null;
 
         const info = TRAMITE_TYPES[doc.tipo];
@@ -68,6 +72,7 @@ class TramitesService {
             tramite_id: id,
             numero_tramite: doc.numero_tramite,
             tipo: doc.tipo,
+            upp: doc.upp || 'N/A', // <--- Mostrar UPP
             estado_actual: doc.estado,
             etapa_actual: doc.etapa_actual,
             historial: doc.historial || [],
@@ -75,13 +80,14 @@ class TramitesService {
         };
     }
 
-    async create(data) {
+    async create(data, usuario_id) {
         if (!TRAMITE_TYPES[data.tipo]) throw new Error('Tipo de trámite no válido');
 
         const nuevoTramite = {
             numero_tramite: `TRM-2026-${String(Math.floor(Math.random() * 1000)).padStart(3, '0')}`,
             tipo: data.tipo,
-            usuario_id: data.usuario_id,
+            usuario_id: usuario_id, // <--- Obligatorio
+            upp: data.upp || 'N/A', // <--- Estandarización UPP
             ganado_ids: data.ganado_ids || [],
             fecha_solicitud: new Date().toISOString(),
             etapa_actual: 1,
@@ -101,9 +107,9 @@ class TramitesService {
         return { id: docRef.id, ...nuevoTramite };
     }
 
-    async avanzarEtapa(id, { responsable, observaciones }) {
-        const doc = await this.getById(id);
-        if (!doc) throw new Error('Trámite no encontrado');
+    async avanzarEtapa(id, { responsable, observaciones }, usuario_id) {
+        const doc = await this.getById(id, usuario_id);
+        if (!doc) throw new Error('Trámite no encontrado o no autorizado');
 
         const info = TRAMITE_TYPES[doc.tipo];
         if (!info) throw new Error('Tipo de trámite desconocido');
@@ -130,9 +136,9 @@ class TramitesService {
         return { etapa_anterior: doc.etapa_actual, etapa_actual: nextEtapaNum, nuevo_historial: newHistoryItem };
     }
 
-    async updateEtapa(id, { etapa, responsable, observaciones }) {
-        const doc = await this.getById(id);
-        if (!doc) throw new Error('Trámite no encontrado');
+    async updateEtapa(id, { etapa, responsable, observaciones }, usuario_id) {
+        const doc = await this.getById(id, usuario_id);
+        if (!doc) throw new Error('Trámite no encontrado o no autorizado');
 
         const info = TRAMITE_TYPES[doc.tipo];
         if (etapa < 1 || etapa > info.etapas.length) throw new Error('Etapa inválida');
@@ -154,7 +160,11 @@ class TramitesService {
         return { etapa_actual: etapa, responsable, observaciones };
     }
 
-    async updateEstado(id, { estado, motivo }) {
+    async updateEstado(id, { estado, motivo }, usuario_id) {
+        // Verificar propiedad antes de actualizar estado
+        const doc = await this.getById(id, usuario_id);
+        if (!doc) throw new Error('Trámite no encontrado o no autorizado');
+
         const historyItem = {
             tipo: 'CAMBIO_ESTADO',
             nuevo_estado: estado,
@@ -168,7 +178,10 @@ class TramitesService {
         return { nuevo_estado: estado };
     }
 
-    async addObservacion(id, { observacion, usuario }) {
+    async addObservacion(id, { observacion, usuario }, usuario_id) {
+        const doc = await this.getById(id, usuario_id);
+        if (!doc) throw new Error('Trámite no encontrado o no autorizado');
+
         const newObs = { observacion, usuario, fecha: new Date().toISOString() };
         await db.collection('tramites').doc(id).update({
             observaciones_list: admin.firestore.FieldValue.arrayUnion(newObs)
@@ -176,7 +189,10 @@ class TramitesService {
         return newObs;
     }
 
-    async addDocumento(id, { nombre_documento, tipo_documento, url }) {
+    async addDocumento(id, { nombre_documento, tipo_documento, url }, usuario_id) {
+        const doc = await this.getById(id, usuario_id);
+        if (!doc) throw new Error('Trámite no encontrado o no autorizado');
+
         const newDoc = { nombre: nombre_documento, tipo: tipo_documento, url, fecha_subida: new Date().toISOString() };
         await db.collection('tramites').doc(id).update({
             documentos: admin.firestore.FieldValue.arrayUnion(newDoc)
@@ -184,12 +200,15 @@ class TramitesService {
         return newDoc;
     }
 
-    async cancel(id, { motivo }) {
-        return this.updateEstado(id, { estado: 'CANCELADO', motivo: motivo || 'Cancelación usuario' });
+    async cancel(id, { motivo }, usuario_id) {
+        return this.updateEstado(id, { estado: 'CANCELADO', motivo: motivo || 'Cancelación usuario' }, usuario_id);
     }
 
-    async getStats() {
-        const snapshot = await db.collection('tramites').get();
+    async getStats(usuario_id) {
+        const snapshot = await db.collection('tramites')
+            .where('usuario_id', '==', usuario_id)
+            .get();
+            
         const stats = { total_tramites: snapshot.size, por_tipo: {}, por_estado: {} };
         snapshot.forEach(doc => {
             const d = doc.data();

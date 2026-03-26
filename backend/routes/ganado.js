@@ -7,16 +7,20 @@ const { db } = require('../config/firebaseConfig');
  * Gestión de animales de la plataforma ganadera
  */
 
-// GET /ganado - Obtener todos los registros de ganado
+// GET /ganado - Obtener solo el ganado del usuario autenticado
 router.get('/', async function (req, res, next) {
   try {
+    const userId = req.user.uid; // Extraído del token por verifyToken
 
-    const snapshot = await db.collection('ganado').get();
+    const snapshot = await db.collection('ganado')
+      .where('usuario_id', '==', userId)
+      .get();
+      
     const ganado = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
     res.status(200).json({
       success: true,
-      message: 'Lista de ganado',
+      message: 'Lista de ganado del usuario',
       data: ganado
     });
   } catch (error) {
@@ -24,36 +28,43 @@ router.get('/', async function (req, res, next) {
   }
 });
 
-// GET /ganado/:id - Obtener un registro específico de ganado
+// GET /ganado/:id - Obtener un registro específico (verificando propiedad)
 router.get('/:id', async function (req, res, next) {
   try {
-
     const { id } = req.params;
+    const userId = req.user.uid;
     const doc = await db.collection('ganado').doc(id).get();
 
     if (!doc.exists) {
       return res.status(404).json({ success: false, message: 'Ganado no encontrado' });
     }
 
+    const data = doc.data();
+    if (data.usuario_id !== userId) {
+      return res.status(403).json({ success: false, message: 'No tienes permiso para ver este registro' });
+    }
+
     res.status(200).json({
       success: true,
       message: `Ganado con ID: ${id}`,
-      data: { id: doc.id, ...doc.data() }
+      data: { id: doc.id, ...data }
     });
   } catch (error) {
     next(error);
   }
 });
 
-// POST /ganado - Crear un nuevo registro de ganado
+// POST /ganado - Crear un nuevo registro vinculado al usuario y UPP
 router.post('/', async function (req, res, next) {
   try {
-
+    const userId = req.user.uid;
     const data = req.body;
 
-    // Add timestamps
+    // Estandarización de datos
     const newData = {
       ...data,
+      usuario_id: userId,
+      upp: data.upp || 'N/A', // Aseguramos que el campo UPP exista
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
@@ -70,19 +81,30 @@ router.post('/', async function (req, res, next) {
   }
 });
 
-// PUT /ganado/:id - Actualizar un registro de ganado
+// PUT /ganado/:id - Actualizar un registro (verificando propiedad)
 router.put('/:id', async function (req, res, next) {
   try {
-    const { db } = require('../config/firebaseConfig');
     const { id } = req.params;
+    const userId = req.user.uid;
     const data = req.body;
+
+    const docRef = db.collection('ganado').doc(id);
+    const doc = await docRef.get();
+
+    if (!doc.exists) {
+      return res.status(404).json({ success: false, message: 'Ganado no encontrado' });
+    }
+
+    if (doc.data().usuario_id !== userId) {
+      return res.status(403).json({ success: false, message: 'No tienes permiso para modificar este registro' });
+    }
 
     const updateData = {
       ...data,
       updatedAt: new Date().toISOString()
     };
 
-    await db.collection('ganado').doc(id).update(updateData);
+    await docRef.update(updateData);
 
     res.status(200).json({
       success: true,
@@ -94,13 +116,24 @@ router.put('/:id', async function (req, res, next) {
   }
 });
 
-// DELETE /ganado/:id - Eliminar un registro de ganado
+// DELETE /ganado/:id - Eliminar (verificando propiedad)
 router.delete('/:id', async function (req, res, next) {
   try {
-    const { db } = require('../config/firebaseConfig');
     const { id } = req.params;
+    const userId = req.user.uid;
 
-    await db.collection('ganado').doc(id).delete();
+    const docRef = db.collection('ganado').doc(id);
+    const doc = await docRef.get();
+
+    if (!doc.exists) {
+      return res.status(404).json({ success: false, message: 'Ganado no encontrado' });
+    }
+
+    if (doc.data().usuario_id !== userId) {
+      return res.status(403).json({ success: false, message: 'No tienes permiso para eliminar este registro' });
+    }
+
+    await docRef.delete();
 
     res.status(200).json({
       success: true,

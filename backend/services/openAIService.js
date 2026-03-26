@@ -101,10 +101,10 @@ class OpenAIService {
 
         if (!doc.exists) {
             const systemContext = this.getSystemContext();
-            // Inicializamos con set, incluyendo el usuario_id obligatorio
+            // Usamos ISOString para consistencia total en el ordenamiento
             await docRef.set({
-                usuario_id: usuario_id || "SISTEMA", // Respaldamos si no viene, aunque debería venir
-                fecha_inicio: admin.firestore.FieldValue.serverTimestamp(),
+                usuario_id: usuario_id || "SISTEMA",
+                fecha_inicio: new Date().toISOString(),
                 mensajes: [systemContext]
             });
             return [systemContext];
@@ -265,7 +265,7 @@ class OpenAIService {
                     this.emitEvent(ws, 'ai_log', { message: `Consultando base de datos: ${functionName}` });
 
                     // LLAMADA AL DESPACHADOR CONECTADO AL SERVICIO REAL
-                    const result = await this.handleFunctionCall(functionName, args);
+                    const result = await this.handleFunctionCall(functionName, args, usuario_id);
 
                     const toolMsg = {
                         role: "tool",
@@ -282,7 +282,7 @@ class OpenAIService {
                     }
                 }
 
-                return this.completion(sesion_id, "_FUNCTION_RESULT_", ws);
+                return this.completion(sesion_id, "_FUNCTION_RESULT_", ws, usuario_id);
             }
 
         } catch (error) {
@@ -291,7 +291,7 @@ class OpenAIService {
         }
     }
 
-    async handleFunctionCall(name, args) {
+    async handleFunctionCall(name, args, usuario_id) {
         console.log("Llamando a: ", name);
         console.log("Con argumentos: ", args);
         try {
@@ -302,12 +302,12 @@ class OpenAIService {
 
                 case "consultarTramite":
                     // Buscamos el trámite real en Firebase mediante el ID
-                    const tramiteById = await tramitesService.getSeguimiento(args.tramite_id);
+                    const tramiteById = await tramitesService.getSeguimiento(args.tramite_id, usuario_id);
                     return tramiteById || { error: "Trámite no encontrado" };
 
                 case "consultarEstadoTramitePorFiltros":
                     // Llamamos al nuevo método en chatbotService
-                    return await chatbotService.getTramiteStatus(args);
+                    return await chatbotService.getTramiteStatus(args, usuario_id);
 
                 case "crearTramite":
                     // Creamos un trámite real en la colección de trámites
@@ -315,10 +315,9 @@ class OpenAIService {
                     // puedes pasarlo desde la sesión.
                     const nuevoTramite = await tramitesService.create({
                         tipo: args.tipo,
-                        uppId: args.uppId, // Asegurarse que el nombre del campo coincida con el servicio de tramites
-                        usuario_id: "SISTEMA_CHATBOT", // O el ID real del usuario
+                        uppId: args.uppId,
                         observaciones: args.observaciones
-                    });
+                    }, usuario_id);
                     return nuevoTramite;
 
                 case "consultarEstatusSanitario":

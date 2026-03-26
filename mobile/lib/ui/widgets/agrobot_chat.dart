@@ -49,13 +49,20 @@ class _AgrobotChatWidgetState extends State<AgrobotChatWidget>
   // ══════════════════════════════════════════════════════════
   // En Web, si corres en local, 'localhost' está OK. 
   // Si apuntas a una IP externa, asegúrate de actualizarlo.
-  static const String _serverUrl = 'http://localhost:3000';
+  // Cambia 'localhost' por tu IP real
+  static const String _serverUrl = 'http://192.168.1.72:3000'; 
+
   // ══════════════════════════════════════════════════════════
 
-  String? _sessionId; // <--- CAMBIO: Opcional al inicio para cargar el último o crear uno
-  bool _cargandoHistorial = false; // <--- NUEVO: Para feedback de carga
+  String? _sessionId; 
+  bool _cargandoHistorial = false; 
   bool _enviando = false;
   http.Client? _httpClient;
+  
+  // --- HISTORIAL DE SESIONES ---
+  List<dynamic> _listaSesiones = [];
+  bool _mostrandoHistorial = false; 
+  bool _estaEliminando = false;
 
   // --- VARIABLES PARA LA CÁMARA/GALERÍA ---
   XFile? _imagenSeleccionada;
@@ -101,7 +108,7 @@ class _AgrobotChatWidgetState extends State<AgrobotChatWidget>
     };
   }
 
-  /// Carga el historial de la última sesión o lista de sesiones
+  /// Carga la lista completa de sesiones y el historial de la última
   Future<void> _cargarHistorial() async {
     setState(() => _cargandoHistorial = true);
     
@@ -113,7 +120,7 @@ class _AgrobotChatWidgetState extends State<AgrobotChatWidget>
       }
 
       final response = await http.get(
-        Uri.parse('$_serverUrl/chatbot/historial?limite=1'), 
+        Uri.parse('$_serverUrl/chatbot/historial?limite=20'), 
         headers: headers,
       );
 
@@ -121,36 +128,90 @@ class _AgrobotChatWidgetState extends State<AgrobotChatWidget>
         final Map<String, dynamic> data = jsonDecode(response.body);
         final List sesiones = data['data']['conversaciones'] ?? [];
         
-        if (sesiones.isNotEmpty) {
-          final ultimaSesion = sesiones.first;
-          final String sId = ultimaSesion['id'] ?? ultimaSesion['sesion_id'];
-          final List mensajesRaw = ultimaSesion['mensajes'] ?? [];
+        setState(() {
+          _listaSesiones = sesiones;
+        });
 
-          setState(() {
-            _sessionId = sId;
-            _mensajes.clear();
-            for (var m in mensajesRaw) {
-              if (m['role'] == 'system') continue;
-              _mensajes.add(ChatMessage(
-                emisor: m['role'] == 'user' ? 'user' : 'bot',
-                texto: m['content'] ?? '',
-              ));
-            }
-          });
-          _moverAlFinal();
-        } else {
-          // Si no hay sesiones, creamos una nueva
+        if (sesiones.isNotEmpty && _sessionId == null) {
+          // Si no tenemos sesión activa, cargamos la última automáticamente
+          _cargarDatosSesion(sesiones.first);
+        } else if (sesiones.isEmpty) {
           _crearNuevaSesion();
         }
       } else {
         debugPrint('Error cargando historial: ${response.statusCode}');
-        _crearNuevaSesion();
+        if (_sessionId == null) _crearNuevaSesion();
       }
     } catch (e) {
       debugPrint('Error de conexión al cargar historial: $e');
-      _crearNuevaSesion();
+      if (_sessionId == null) _crearNuevaSesion();
     } finally {
       _finalizarCargaHistorial();
+    }
+  }
+
+  void _cargarDatosSesion(dynamic sesion) {
+    final String sId = sesion['id'] ?? sesion['sesion_id'];
+    final List mensajesRaw = sesion['mensajes'] ?? [];
+
+    setState(() {
+      _sessionId = sId;
+      _mostrandoHistorial = false;
+      _mensajes.clear();
+      for (var m in mensajesRaw) {
+        if (m['role'] == 'system') continue;
+        _mensajes.add(ChatMessage(
+          emisor: m['role'] == 'user' ? 'user' : 'bot',
+          texto: m['content'] ?? '',
+        ));
+      }
+    });
+    _moverAlFinal();
+  }
+
+  Future<void> _cargarSesionPorId(String id) async {
+    setState(() => _cargandoHistorial = true);
+    try {
+      final headers = await _getAuthHeaders();
+      final response = await http.get(
+        Uri.parse('$_serverUrl/chatbot/sesion/$id'),
+        headers: headers,
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        _cargarDatosSesion(data['data']);
+      }
+    } catch (e) {
+      debugPrint('Error cargando sesión específica: $e');
+    } finally {
+      setState(() => _cargandoHistorial = false);
+    }
+  }
+
+  Future<void> _eliminarSesion(String id) async {
+    setState(() => _estaEliminando = true);
+    try {
+      final headers = await _getAuthHeaders();
+      final response = await http.delete(
+        Uri.parse('$_serverUrl/chatbot/sesion/$id'),
+        headers: headers,
+      );
+
+      if (response.statusCode == 200) {
+        if (_sessionId == id) {
+          setState(() {
+            _sessionId = null;
+            _mensajes.clear();
+          });
+          _crearNuevaSesion();
+        }
+        _cargarHistorial(); 
+      }
+    } catch (e) {
+      debugPrint('Error eliminando sesión: $e');
+    } finally {
+      setState(() => _estaEliminando = false);
     }
   }
 
@@ -177,7 +238,10 @@ class _AgrobotChatWidgetState extends State<AgrobotChatWidget>
         final data = jsonDecode(response.body);
         setState(() {
           _sessionId = data['data']['sesion_id'];
+          _mensajes.clear(); 
+          _mostrandoHistorial = false;
         });
+        _cargarHistorial(); // Refrescar lista
       } else {
          setState(() => _sessionId = const Uuid().v4());
       }
@@ -499,8 +563,10 @@ class _AgrobotChatWidgetState extends State<AgrobotChatWidget>
       child: Column(
         children: [
           _buildHeader(),
-          Expanded(child: _buildChatArea()),
-          if (_mensajes.length <= 1) _buildSugerencias(),
+          Expanded(
+            child: _mostrandoHistorial ? _buildHistorialView() : _buildChatArea(),
+          ),
+          if (!_mostrandoHistorial && _mensajes.length <= 1) _buildSugerencias(),
           
           if (_imagenSeleccionada != null)
             Container(
@@ -550,33 +616,138 @@ class _AgrobotChatWidgetState extends State<AgrobotChatWidget>
         children: [
           Row(
             children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(12),
+              IconButton(
+                onPressed: () {
+                  setState(() => _mostrandoHistorial = !_mostrandoHistorial);
+                  if (_mostrandoHistorial) _cargarHistorial();
+                },
+                icon: Icon(
+                  _mostrandoHistorial ? Icons.chat_bubble_rounded : Icons.history_rounded,
+                  color: Colors.white,
                 ),
-                child: const Icon(Icons.smart_toy_rounded, color: Colors.white, size: 22),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 4),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text("AgroBot Voice", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-                  Row(
-                    children: [
-                      Container(width: 8, height: 8, decoration: const BoxDecoration(color: Colors.greenAccent, shape: BoxShape.circle)),
-                      const SizedBox(width: 6),
-                      Text("En línea", style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontSize: 12)),
-                    ],
-                  ),
+                  Text(_mostrandoHistorial ? "Tus Conversaciones" : "AgroBot Voice", 
+                    style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                  if (!_mostrandoHistorial)
+                    Row(
+                      children: [
+                        Container(width: 8, height: 8, decoration: const BoxDecoration(color: Colors.greenAccent, shape: BoxShape.circle)),
+                        const SizedBox(width: 6),
+                        Text("En línea", style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontSize: 12)),
+                      ],
+                    ),
                 ],
               ),
             ],
           ),
-          IconButton(
-            onPressed: () => Navigator.pop(context),
-            icon: const Icon(Icons.close_rounded, color: Colors.white),
+          Row(
+            children: [
+              if (!_mostrandoHistorial)
+                IconButton(
+                  onPressed: () {
+                    setState(() {
+                      _sessionId = null;
+                      _mensajes.clear();
+                    });
+                    _crearNuevaSesion();
+                  },
+                  icon: const Icon(Icons.add_comment_rounded, color: Colors.white),
+                  tooltip: "Nueva Sesión",
+                ),
+              IconButton(
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(Icons.close_rounded, color: Colors.white),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHistorialView() {
+    return Container(
+      color: fondoGris,
+      child: Stack(
+        children: [
+          _listaSesiones.isEmpty && !_cargandoHistorial
+              ? const Center(child: Text("No hay conversaciones previas."))
+              : ListView.builder(
+                  padding: const EdgeInsets.all(12),
+                  itemCount: _listaSesiones.length,
+                  itemBuilder: (context, index) {
+                    final sesion = _listaSesiones[index];
+                    final String id = sesion['id'] ?? sesion['sesion_id'];
+                    final String fecha = sesion['fecha_inicio'] ?? '';
+                    final List msgs = sesion['mensajes'] ?? [];
+                    final String ultimoTxt = msgs.isNotEmpty ? msgs.last['content'] : 'Conversación vacía';
+                    final bool esActiva = _sessionId == id;
+
+                    return Card(
+                      elevation: esActiva ? 2 : 0,
+                      margin: const EdgeInsets.only(bottom: 10),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(15),
+                        side: esActiva ? BorderSide(color: azulClaro, width: 2) : BorderSide.none,
+                      ),
+                      child: ListTile(
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        leading: CircleAvatar(
+                          backgroundColor: esActiva ? azulPrincipal : Colors.grey.shade200,
+                          child: Icon(Icons.chat_outlined, color: esActiva ? Colors.white : Colors.grey),
+                        ),
+                        title: Text(
+                          "Sesión: ${id.substring(0, 8)}...",
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(ultimoTxt, maxLines: 1, overflow: TextOverflow.ellipsis),
+                            const SizedBox(height: 4),
+                            Text(fecha.split('T').first, style: TextStyle(fontSize: 10, color: Colors.grey.shade600)),
+                          ],
+                        ),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                              onPressed: _estaEliminando ? null : () => _showConfirmDelete(id),
+                            ),
+                            const Icon(Icons.chevron_right),
+                          ],
+                        ),
+                        onTap: () => _cargarSesionPorId(id),
+                      ),
+                    );
+                  },
+                ),
+          if (_cargandoHistorial || _estaEliminando)
+            const Center(child: CircularProgressIndicator()),
+        ],
+      ),
+    );
+  }
+
+  void _showConfirmDelete(String id) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Eliminar Sesión"),
+        content: const Text("¿Estás seguro de que deseas eliminar esta conversación?"),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancelar")),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _eliminarSesion(id);
+            },
+            child: const Text("Eliminar", style: TextStyle(color: Colors.red)),
           ),
         ],
       ),
@@ -716,7 +887,9 @@ class _AgrobotChatWidgetState extends State<AgrobotChatWidget>
     return Container(
       padding: EdgeInsets.only(left: 10, right: 16, top: 12, bottom: MediaQuery.of(context).viewInsets.bottom + 12),
       decoration: BoxDecoration(color: Colors.white, boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, -2))]),
-      child: _isRecording ? _buildRecordingState() : Row(
+      child: _mostrandoHistorial 
+        ? Center(child: Text("Selecciona una sesión para continuar", style: TextStyle(color: Colors.grey.shade600, fontStyle: FontStyle.italic)))
+        : (_isRecording ? _buildRecordingState() : Row(
         children: [
           IconButton(icon: Icon(Icons.attach_file, color: azulPrincipal, size: 26), onPressed: _enviando ? null : _seleccionarImagen),
           Expanded(child: Container(padding: const EdgeInsets.symmetric(horizontal: 16), decoration: BoxDecoration(color: fondoGris, borderRadius: BorderRadius.circular(25)), child: TextField(controller: _controller, focusNode: _focusNode, onSubmitted: (_) => _enviarMensaje(), textInputAction: TextInputAction.send, decoration: const InputDecoration(hintText: 'Escribe tu mensaje...', border: InputBorder.none, contentPadding: EdgeInsets.symmetric(vertical: 12))))),
@@ -725,7 +898,7 @@ class _AgrobotChatWidgetState extends State<AgrobotChatWidget>
           const SizedBox(width: 8),
           GestureDetector(onTap: _enviando ? null : () => _enviarMensaje(), child: Container(width: 44, height: 44, decoration: BoxDecoration(gradient: LinearGradient(colors: _enviando ? [Colors.grey.shade400, Colors.grey.shade500] : [azulClaro, azulPrincipal]), shape: BoxShape.circle, boxShadow: _enviando ? [] : [BoxShadow(color: azulPrincipal.withValues(alpha: 0.3), blurRadius: 8, offset: const Offset(0, 3))]), child: const Icon(Icons.send_rounded, color: Colors.white, size: 20))),
         ],
-      ),
+      )),
     );
   }
 

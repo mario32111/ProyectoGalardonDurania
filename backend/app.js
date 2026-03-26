@@ -30,9 +30,15 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // --- MIDDLEWARE DE AUTENTICACION GLOBAL PARA RUTAS DE DATOS ---
 // Todas las rutas debajo de esta linea requieren el Header: Authorization Bearer <token>
-app.use('/users', verifyToken);
+app.use('/users', (req, res, next) => {
+  if (req.path === '/login') return next();
+  return verifyToken(req, res, next);
+});
 app.use('/ganado', verifyToken);
-app.use('/usuarios', verifyToken);
+app.use('/usuarios', (req, res, next) => {
+  if (req.path === '/login') return next();
+  return verifyToken(req, res, next);
+});
 app.use('/inventario', verifyToken);
 app.use('/chatbot', verifyToken);
 app.use('/tramites', verifyToken);

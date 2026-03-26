@@ -113,8 +113,16 @@ app.get('/view', (req, res) => {
           <div style="height: 1px; background-color: rgba(255,255,255,0.2); margin: 16px 0 24px 0;"></div>
           
           <!-- Barcode -->
-          <div style="background-color: white; padding: 16px; border-radius: 8px; width: fit-content; margin: 0 auto;">
+          <div style="background-color: white; padding: 16px; border-radius: 8px; width: fit-content; margin: 0 auto 24px auto;">
             <img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${cred.barcodeValue}" alt="QR Code" style="display: block; width: 150px; height: 150px;">
+          </div>
+          
+          <!-- Actions -->
+          <div style="display: flex; gap: 12px; justify-content: center;">
+            <a href="/edit/${cred.id}" style="flex: 1; text-align: center; padding: 10px; background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.3); border-radius: 8px; color: white; text-decoration: none; font-size: 0.9rem; font-weight: 500; transition: all 0.2s;">Editar</a>
+            <form action="/api/wallet/delete/${cred.id}" method="POST" style="flex: 1; display: contents;">
+              <button type="submit" style="flex: 1; padding: 10px; background: rgba(255,59,48,0.2); border: 1px solid rgba(255,59,48,0.4); border-radius: 8px; color: #ff3b30; cursor: pointer; font-size: 0.9rem; font-weight: 500; transition: all 0.2s;" onclick="return confirm('¿Estás seguro de eliminar esta credencial?')">Eliminar</button>
+            </form>
           </div>
           
         </div>`;
@@ -183,9 +191,98 @@ app.get('/view', (req, res) => {
   `);
 });
 
-// Basic route to check health
-app.get('/health', (req, res) => {
-  res.status(200).json({ status: 'UP', message: 'Express Google Wallet API base is running' });
+// Example route to generate a Generic class and object in Google Wallet
+app.get('/edit/:id', (req, res) => {
+  const cred = createdCredentials.find(c => c.id === req.params.id);
+  if (!cred) return res.redirect('/view');
+
+  res.send(`
+    <!DOCTYPE html>
+    <html lang="es">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Editar Credencial</title>
+      <style>
+        body { font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f8f9fa; margin: 0; padding: 40px 20px; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+        .container { width: 100%; max-width: 500px; background: white; border-radius: 20px; padding: 40px; box-shadow: 0 8px 24px rgba(0,0,0,0.04); }
+        h1 { color: #202124; margin-top: 0; margin-bottom: 30px; font-size: 1.8rem; text-align: center; }
+        .form-group { margin-bottom: 20px; }
+        label { display: block; margin-bottom: 8px; font-weight: 600; color: #3c4043; }
+        input { width: 100%; padding: 12px; border: 1px solid #dadce0; border-radius: 8px; box-sizing: border-box; font-size: 1rem; }
+        .btn { display: inline-block; padding: 14px 28px; background-color: #0f4a3e; color: white; text-decoration: none; border-radius: 10px; font-weight: 600; border: none; cursor: pointer; font-size: 1rem; width: 100%; box-sizing: border-box; transition: all 0.2s; }
+        .btn:hover { background-color: #0b362d; transform: translateY(-1px); }
+        .btn-back { display: block; margin-top: 20px; color: #5f6368; text-decoration: none; font-weight: 500; text-align: center; }
+        .btn-back:hover { color: #202124; text-decoration: underline; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <h1>Editar ID Ganadero</h1>
+        <form action="/api/wallet/update/${cred.id}" method="POST">
+          <div class="form-group">
+            <label for="headerName">Nombre del Ganadero</label>
+            <input type="text" id="headerName" name="headerName" value="${cred.headerName}" required>
+          </div>
+          <button type="submit" class="btn">Guardar Cambios</button>
+        </form>
+        <a href="/view" class="btn-back">Cancelar</a>
+      </div>
+    </body>
+    </html>
+  `);
+});
+
+app.use(express.urlencoded({ extended: true }));
+
+app.post('/api/wallet/update/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { headerName } = req.body;
+    
+    // 1. Find the credential
+    const index = createdCredentials.findIndex(c => c.id === id);
+    if (index === -1) throw new Error('Credencial no encontrada localmente');
+
+    // 2. Update Google Wallet Object
+    const updateData = {
+      "header": { "defaultValue": { "language": "es", "value": headerName } }
+    };
+
+    await walletService.updateGenericObject(id, updateData);
+
+    // 3. Update local array
+    createdCredentials[index].headerName = headerName;
+
+    res.redirect('/view');
+  } catch (error) {
+    console.error('Error updating generic credential:', error);
+    res.status(500).send(`<p>Error al actualizar la credencial: ${error.message}</p><a href="/view">Volver</a>`);
+  }
+});
+
+app.post('/api/wallet/delete/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // 1. Delete from Google Wallet
+    try {
+      await walletService.deleteGenericObject(id);
+    } catch (e) {
+      console.warn('Error deleting from Google Wallet (might not exist):', e.message);
+    }
+
+    // 2. Remove from local array
+    const index = createdCredentials.findIndex(c => c.id === id);
+    if (index !== -1) {
+      createdCredentials.splice(index, 1);
+    }
+
+    res.redirect('/view');
+  } catch (error) {
+    console.error('Error deleting generic credential:', error);
+    res.status(500).send(`<p>Error al eliminar la credencial: ${error.message}</p><a href="/view">Volver</a>`);
+  }
 });
 
 // Example route to generate a Generic class and object in Google Wallet

@@ -3,18 +3,30 @@ const TramitesService = require('./tramitesService'); // Importar TramitesServic
 
 class ChatbotService {
     async getHistorial(usuario_id, limite = 50) {
+        // Quitamos temporalmente .orderBy para evitar el Error 500 si falta el índice en Firebase
         const snapshot = await db.collection('sesiones')
             .where('usuario_id', '==', usuario_id)
-            .orderBy('fecha_inicio', 'desc')
             .limit(Number(limite))
             .get();
-        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        
+        let conversaciones = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        
+        // Ordenamos en memoria para no cargar a la base de datos y evitar el error 500
+        conversaciones.sort((a, b) => {
+            const dateA = new Date(a.fecha_inicio || 0);
+            const dateB = new Date(b.fecha_inicio || 0);
+            return dateB - dateA;
+        });
+
+        return conversaciones;
     }
 
-    async getSesion(sesion_id) {
+    async getSesion(sesion_id, usuario_id) {
         const doc = await db.collection('sesiones').doc(sesion_id).get();
         if (!doc.exists) return null;
-        return { sesion_id: doc.id, ...doc.data() };
+        const data = doc.data();
+        if (data.usuario_id !== usuario_id) return null; // <--- Validación de propiedad
+        return { sesion_id: doc.id, ...data };
     }
 
     async createSesion(usuario_id) {
@@ -27,29 +39,37 @@ class ChatbotService {
         return { sesion_id: docRef.id, ...nuevaSesion };
     }
 
-    async deleteSesion(sesion_id) {
-        await db.collection('sesiones').doc(sesion_id).delete();
+    async deleteSesion(sesion_id, usuario_id) {
+        const docRef = db.collection('sesiones').doc(sesion_id);
+        const doc = await docRef.get();
+        
+        if (!doc.exists || doc.data().usuario_id !== usuario_id) {
+            throw new Error('No autorizado o sesión no encontrada');
+        }
+
+        await docRef.delete();
         return { sesion_id };
     }
 
-    async saveFeedback(data) {
+    async saveFeedback(data, usuario_id) {
         const feedbackData = {
             ...data,
+            usuario_id, // <--- Registrar quién dio el feedback
             fecha: new Date().toISOString()
         };
         await db.collection('feedback_chatbot').add(feedbackData);
         return feedbackData;
     }
 
-    async getTramiteStatus(filters) {
+    async getTramiteStatus(filters, usuario_id) {
         try {
             let tramite = null;
 
             // Prioritize getting by ID if provided
             if (filters.tramiteId) {
-                tramite = await TramitesService.getById(filters.tramiteId);
+                tramite = await TramitesService.getById(filters.tramiteId, usuario_id);
                 if (!tramite) {
-                    return { success: false, message: `Trámite con ID ${filters.tramiteId} no encontrado.` };
+                    return { success: false, message: `Trámite con ID ${filters.tramiteId} no encontrado o no autorizado.` };
                 }
             } else if (filters.upp && filters.nombreTramite) {
                 // If no ID, try to find by upp and nombreTramite (tipo)
@@ -59,7 +79,7 @@ class ChatbotService {
                     tipo: filters.nombreTramite 
                 };
                 
-                const tramites = await TramitesService.getAll(queryFilters);
+                const tramites = await TramitesService.getAll(queryFilters, usuario_id);
 
                 if (tramites.length === 0) {
                     return { success: false, message: `No se encontraron trámites con UP P: ${filters.upp} y tipo: ${filters.nombreTramite}.` };

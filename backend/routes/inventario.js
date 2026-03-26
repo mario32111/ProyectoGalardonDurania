@@ -2,10 +2,10 @@ var express = require('express');
 var router = express.Router();
 const inventarioService = require('../services/inventarioService');
 
-// GET /inventario - Obtener todos los items
+// GET /inventario - Obtener todos los items del usuario
 router.get('/', async function (req, res, next) {
   try {
-    const data = await inventarioService.getAll();
+    const data = await inventarioService.getAll(req.user.uid);
     res.status(200).json({ success: true, message: 'Lista de inventario', data });
   } catch (error) {
     next(error);
@@ -15,8 +15,8 @@ router.get('/', async function (req, res, next) {
 // GET /inventario/:id - Obtener item
 router.get('/:id', async function (req, res, next) {
   try {
-    const data = await inventarioService.getById(req.params.id);
-    if (!data) return res.status(404).json({ success: false, message: 'Item no encontrado' });
+    const data = await inventarioService.getById(req.params.id, req.user.uid);
+    if (!data) return res.status(404).json({ success: false, message: 'Item no encontrado o no pertenece al usuario' });
 
     res.status(200).json({ success: true, message: `Item con ID: ${req.params.id}`, data });
   } catch (error) {
@@ -27,7 +27,7 @@ router.get('/:id', async function (req, res, next) {
 // POST /inventario - Crear item
 router.post('/', async function (req, res, next) {
   try {
-    const data = await inventarioService.create(req.body);
+    const data = await inventarioService.create(req.body, req.user.uid);
     res.status(201).json({ success: true, message: 'Item agregado', data });
   } catch (error) {
     next(error);
@@ -37,7 +37,7 @@ router.post('/', async function (req, res, next) {
 // PUT /inventario/:id - Actualizar item
 router.put('/:id', async function (req, res, next) {
   try {
-    const data = await inventarioService.update(req.params.id, req.body);
+    const data = await inventarioService.update(req.params.id, req.body, req.user.uid);
     res.status(200).json({ success: true, message: `Item ${req.params.id} actualizado`, data });
   } catch (error) {
     next(error);
@@ -47,7 +47,7 @@ router.put('/:id', async function (req, res, next) {
 // DELETE /inventario/:id - Eliminar item
 router.delete('/:id', async function (req, res, next) {
   try {
-    await inventarioService.delete(req.params.id);
+    await inventarioService.delete(req.params.id, req.user.uid);
     res.status(200).json({ success: true, message: `Item ${req.params.id} eliminado` });
   } catch (error) {
     next(error);
@@ -58,7 +58,7 @@ router.delete('/:id', async function (req, res, next) {
 router.patch('/:id/stock', async function (req, res, next) {
   try {
     const { cantidad, operacion } = req.body;
-    const data = await inventarioService.updateStock(req.params.id, cantidad, operacion);
+    const data = await inventarioService.updateStock(req.params.id, cantidad, operacion, req.user.uid);
     res.status(200).json({ success: true, message: `Stock actualizado`, data });
   } catch (error) {
     next(error);
@@ -68,7 +68,7 @@ router.patch('/:id/stock', async function (req, res, next) {
 // GET /inventario/alertas/stock-bajo
 router.get('/alertas/stock-bajo', async function (req, res, next) {
   try {
-    const data = await inventarioService.getStockBajo();
+    const data = await inventarioService.getStockBajo(req.user.uid);
     res.status(200).json({ success: true, message: 'Items con stock bajo', data });
   } catch (error) {
     next(error);

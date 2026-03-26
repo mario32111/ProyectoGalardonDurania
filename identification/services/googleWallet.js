@@ -80,6 +80,38 @@ class GoogleWalletService {
 
     return response.data;
   }
+
+  /**
+   * Updates an existing GenericObject
+   * @param {string} objectId 
+   * @param {Object} objectData 
+   * @returns {Object} response data
+   */
+  async updateGenericObject(objectId, objectData) {
+    const client = await this.getClient();
+    console.log(`Updating generic object: ${objectId}`);
+    const response = await client.request({
+      url: `https://walletobjects.googleapis.com/walletobjects/v1/genericObject/${objectId}`,
+      method: 'PATCH',
+      data: objectData
+    });
+    return response.data;
+  }
+
+  /**
+   * Deletes a GenericObject
+   * @param {string} objectId 
+   * @returns {Object} response data
+   */
+  async deleteGenericObject(objectId) {
+    const client = await this.getClient();
+    console.log(`Deleting generic object: ${objectId}`);
+    const response = await client.request({
+      url: `https://walletobjects.googleapis.com/walletobjects/v1/genericObject/${objectId}`,
+      method: 'DELETE'
+    });
+    return response.data;
+  }
 }
 
 module.exports = { GoogleWalletService };

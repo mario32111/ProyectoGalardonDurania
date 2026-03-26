@@ -270,8 +270,13 @@ class _VistaTramitesVentanillaState extends State<VistaTramitesVentanilla> {
             // --- LECTOR DE FIREBASE EN TIEMPO REAL ---
             Expanded(
               child: StreamBuilder<QuerySnapshot>(
-                // Leemos la colección ordenando por fecha de creación (los más nuevos arriba)
-                stream: FirebaseFirestore.instance.collection('tramites').orderBy('timestamp', descending: true).snapshots(),
+                // FILTRADO MULTI-TENANT: Solo cargar los trámites del usuario actual
+                // ORDENAMIENTO: Usar fecha_solicitud (ISO String) que es consistente con el backend
+                stream: FirebaseFirestore.instance
+                    .collection('tramites')
+                    .where('usuario_id', isEqualTo: FirebaseAuth.instance.currentUser?.uid ?? 'anonimo')
+                    .orderBy('fecha_solicitud', descending: true)
+                    .snapshots(),
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
                     return const Center(child: CircularProgressIndicator());
