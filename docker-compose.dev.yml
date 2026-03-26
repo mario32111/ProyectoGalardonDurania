@@ -1,0 +1,52 @@
+# =============================================
+# Docker Compose — Entorno de Desarrollo
+# Servicios: backend (Express) + api-detection (YOLO)
+# =============================================
+# Uso:
+#   docker compose -f docker-compose.dev.yml up --build
+#   docker compose -f docker-compose.dev.yml down
+# =============================================
+
+services:
+  # ─── Backend Express (API principal) ───────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: agro-backend
+    ports:
+      - "3000:3000"
+    env_file:
+      - ./backend/.env
+    volumes:
+      # Montar credenciales de Firebase y Google Wallet (no se copian en la imagen)
+      - ./backend/firebase-service-account.json:/app/firebase-service-account.json:ro
+      - ./backend/google-wallet-credentials.json:/app/google-wallet-credentials.json:ro
+      # Montar código fuente para desarrollo (hot-reload si se agrega nodemon)
+      - ./backend:/app
+      - /app/node_modules
+    restart: unless-stopped
+    networks:
+      - agro-network
+
+  # ─── API de Detección YOLO ─────────────────
+  api-detection:
+    build:
+      context: ./ApiDetection
+      dockerfile: Dockerfile
+    container_name: agro-detection
+    ports:
+      - "3002:3002"
+    volumes:
+      # Montar código fuente para desarrollo
+      - ./ApiDetection:/app
+      - /app/node_modules
+      # Montar el modelo YOLO (evitar re-copiarlo en cada build)
+      - ./ApiDetection/best.pt:/app/best.pt:ro
+    restart: unless-stopped
+    networks:
+      - agro-network
+
+networks:
+  agro-network:
+    driver: bridge

@@ -1,0 +1,45 @@
+# =============================================
+# .dockerignore — Monorepo
+# Evitar copiar archivos innecesarios al contexto de Docker
+# =============================================
+
+# Git
+.git
+.gitignore
+
+# Dependencias (se instalan dentro del contenedor)
+node_modules
+**/node_modules
+
+# Entornos virtuales de Python
+venv
+.venv
+__pycache__
+*.pyc
+
+# Variables de entorno (se montan o inyectan)
+.env
+.env.*
+
+# IDE
+.vscode
+.idea
+
+# Documentación
+*.md
+!README.md
+
+# Archivos temporales
+*.log
+*.tmp
+uploads/*
+
+# Mobile (no se necesita en los contenedores de backend)
+mobile/
+
+# Modelos Whisper (IAService)
+IAService/models_whisper/
+
+# Firebase / credenciales (se montan como volúmenes)
+*-service-account.json
+*-credentials.json
