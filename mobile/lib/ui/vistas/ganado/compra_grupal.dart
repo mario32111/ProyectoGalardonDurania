@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // <--- AGREGADO PARA UID
 
 class VistaCompraGrupal extends StatefulWidget {
   const VistaCompraGrupal({super.key});
@@ -19,9 +20,46 @@ class _VistaCompraGrupalState extends State<VistaCompraGrupal> {
   final TextEditingController _pesoController = TextEditingController();
   final TextEditingController _precioController = TextEditingController();
 
-  double _totalEstimado = 0.0;
-  bool _estaGuardando = false; // <--- Nuevo: Controla la ruedita de carga
+  // --- GESTIÓN DE UPPS DESDE EL MAPA ---
+  List<String> _uppsDisponibles = [];
+  String? _uppSeleccionada; 
+  bool _cargandoUpps = true;
 
+  double _totalEstimado = 0.0;
+  bool _estaGuardando = false; 
+
+  @override
+  void initState() {
+    super.initState();
+    _obtenerUppsDelMapa();
+  }
+
+  Future<void> _obtenerUppsDelMapa() async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return;
+
+      final snapshot = await FirebaseFirestore.instance
+          .collection('zonas_mapa')
+          .where('usuario_id', isEqualTo: user.uid)
+          .get();
+
+      final conjuntoUpps = snapshot.docs
+          .map((doc) => doc.data()['upp']?.toString() ?? '')
+          .where((upp) => upp.isNotEmpty)
+          .toSet();
+
+      if (mounted) {
+        setState(() {
+          _uppsDisponibles = conjuntoUpps.toList();
+          _cargandoUpps = false;
+        });
+      }
+    } catch (e) {
+      debugPrint("Error al cargar UPPs: $e");
+      if (mounted) setState(() => _cargandoUpps = false);
+    }
+  }
   // --- SELECCIONADOR DE FECHA (CALENDARIO) ---
   Future<void> _seleccionarFecha(BuildContext context) async {
     final DateTime? fechaElegida = await showDatePicker(
@@ -69,12 +107,23 @@ class _VistaCompraGrupalState extends State<VistaCompraGrupal> {
       return;
     }
 
+    if (_uppSeleccionada == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Debes seleccionar la UPP de destino desde el mapa'), backgroundColor: Colors.orange),
+      );
+      return;
+    }
+
     setState(() {
       _estaGuardando = true; // Empieza a girar la ruedita
     });
 
     try {
+      final user = FirebaseAuth.instance.currentUser;
+
       await FirebaseFirestore.instance.collection('compras_lotes').add({
+        'usuario_id': user?.uid ?? 'anonimo', // Asociar al usuario actual
+        'upp_destino': _uppSeleccionada, // <--- USAR UPP SELECCIONADA
         'proveedor': _proveedorController.text.trim(),
         'origen': _origenController.text.trim(),
         'fecha_indicada': _fechaController.text.trim().isEmpty ? 'Sin fecha' : _fechaController.text.trim(),
@@ -90,6 +139,7 @@ class _VistaCompraGrupalState extends State<VistaCompraGrupal> {
       _origenController.clear();
       _fechaController.clear();
       _cabezasController.clear();
+      // No limpiamos el selector de UPP
       _pesoController.clear();
       _precioController.clear();
       
@@ -153,6 +203,30 @@ class _VistaCompraGrupalState extends State<VistaCompraGrupal> {
               child: Column(
                 children: [
                   _campoTexto("Nombre del Proveedor", Icons.store, TextInputType.text, _proveedorController),
+                  const SizedBox(height: 15),
+                  
+                  // --- NUEVO: SELECTOR DE UPPS ---
+                  _cargandoUpps 
+                    ? const LinearProgressIndicator() 
+                    : DropdownButtonFormField<String>(
+                        value: _uppSeleccionada,
+                        hint: const Text("Seleccionar UPP de destino"),
+                        isExpanded: true,
+                        decoration: InputDecoration(
+                          labelText: "UPP Destino (Mapa)",
+                          prefixIcon: const Icon(Icons.pin, color: Colors.grey),
+                          filled: true, fillColor: const Color(0xFFF8FAFC),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                        ),
+                        items: _uppsDisponibles.map((upp) => DropdownMenuItem(value: upp, child: Text(upp))).toList(),
+                        onChanged: (val) => setState(() => _uppSeleccionada = val),
+                      ),
+                  if (!_cargandoUpps && _uppsDisponibles.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.all(8.0),
+                      child: Text("! Registra primero tus zonas en el Mapa !", style: TextStyle(color: Colors.red, fontSize: 11, fontWeight: FontWeight.bold)),
+                    ),
+
                   const SizedBox(height: 15),
                   _campoTexto("Lugar de Origen (Rancho/Ciudad)", Icons.map, TextInputType.text, _origenController),
                   const SizedBox(height: 15),

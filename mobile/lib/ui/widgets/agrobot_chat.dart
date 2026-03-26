@@ -10,6 +10,7 @@ import 'package:record/record.dart';
 import 'package:path_provider/path_provider.dart'; 
 import 'package:permission_handler/permission_handler.dart'; 
 import 'package:http_parser/http_parser.dart'; 
+import 'package:firebase_auth/firebase_auth.dart'; // <--- NUEVO: AUTH DE FIREBASE 
 
 /// Modelo simple para cada mensaje del chat
 class ChatMessage {
@@ -51,7 +52,8 @@ class _AgrobotChatWidgetState extends State<AgrobotChatWidget>
   static const String _serverUrl = 'http://localhost:3000';
   // ══════════════════════════════════════════════════════════
 
-  late final String _sessionId;
+  String? _sessionId; // <--- CAMBIO: Opcional al inicio para cargar el último o crear uno
+  bool _cargandoHistorial = false; // <--- NUEVO: Para feedback de carga
   bool _enviando = false;
   http.Client? _httpClient;
 
@@ -78,17 +80,110 @@ class _AgrobotChatWidgetState extends State<AgrobotChatWidget>
   @override
   void initState() {
     super.initState();
-    _sessionId = const Uuid().v4();
     _audioRecorder = AudioRecorder();
 
-    // Mensaje de bienvenida
-    _mensajes.add(
-      ChatMessage(
-        emisor: 'bot',
-        texto:
-            '¡Hola! 👋 Soy **AgroBot**, tu asistente ganadero.\n\nPregúntame lo que necesites, envíame un audio o **adjunta una foto** para analizarla.',
-      ),
-    );
+    // Cargamos el historial al iniciar
+    _cargarHistorial();
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  //  FUNCIONES DE APOYO (AUTH & HISTORIAL)
+  // ═══════════════════════════════════════════════════════════
+
+  /// Obtiene los headers de autorización con el token de Firebase
+  Future<Map<String, String>> _getAuthHeaders() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return {};
+    final token = await user.getIdToken();
+    return {
+      'Authorization': 'Bearer $token',
+      'Content-Type': 'application/json',
+    };
+  }
+
+  /// Carga el historial de la última sesión o lista de sesiones
+  Future<void> _cargarHistorial() async {
+    setState(() => _cargandoHistorial = true);
+    
+    try {
+      final headers = await _getAuthHeaders();
+      if (headers.isEmpty) {
+         _finalizarCargaHistorial();
+         return;
+      }
+
+      final response = await http.get(
+        Uri.parse('$_serverUrl/chatbot/historial?limite=1'), 
+        headers: headers,
+      );
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> data = jsonDecode(response.body);
+        final List sesiones = data['data']['conversaciones'] ?? [];
+        
+        if (sesiones.isNotEmpty) {
+          final ultimaSesion = sesiones.first;
+          final String sId = ultimaSesion['id'] ?? ultimaSesion['sesion_id'];
+          final List mensajesRaw = ultimaSesion['mensajes'] ?? [];
+
+          setState(() {
+            _sessionId = sId;
+            _mensajes.clear();
+            for (var m in mensajesRaw) {
+              if (m['role'] == 'system') continue;
+              _mensajes.add(ChatMessage(
+                emisor: m['role'] == 'user' ? 'user' : 'bot',
+                texto: m['content'] ?? '',
+              ));
+            }
+          });
+          _moverAlFinal();
+        } else {
+          // Si no hay sesiones, creamos una nueva
+          _crearNuevaSesion();
+        }
+      } else {
+        debugPrint('Error cargando historial: ${response.statusCode}');
+        _crearNuevaSesion();
+      }
+    } catch (e) {
+      debugPrint('Error de conexión al cargar historial: $e');
+      _crearNuevaSesion();
+    } finally {
+      _finalizarCargaHistorial();
+    }
+  }
+
+  void _finalizarCargaHistorial() {
+    if (mounted) {
+      setState(() => _cargandoHistorial = false);
+      if (_mensajes.isEmpty) {
+        _mensajes.add(ChatMessage(
+          emisor: 'bot',
+          texto: '¡Hola! 👋 Soy **AgroBot**, tu asistente ganadero. ¿Cómo puedo ayudarte hoy?',
+        ));
+      }
+    }
+  }
+
+  Future<void> _crearNuevaSesion() async {
+    try {
+      final headers = await _getAuthHeaders();
+      final response = await http.post(
+        Uri.parse('$_serverUrl/chatbot/sesion/nueva'),
+        headers: headers,
+      );
+      if (response.statusCode == 201) {
+        final data = jsonDecode(response.body);
+        setState(() {
+          _sessionId = data['data']['sesion_id'];
+        });
+      } else {
+         setState(() => _sessionId = const Uuid().v4());
+      }
+    } catch (e) {
+      setState(() => _sessionId = const Uuid().v4());
+    }
   }
 
   @override
@@ -187,7 +282,12 @@ class _AgrobotChatWidgetState extends State<AgrobotChatWidget>
     try {
       _httpClient = http.Client();
       var request = http.MultipartRequest('POST', Uri.parse('$_serverUrl/chatbot/audio-chat'));
-      request.fields['session_id'] = _sessionId;
+      
+      // AGREGAR TOKEN A MULTIPART
+      final headers = await _getAuthHeaders();
+      request.headers.addAll(headers);
+
+      request.fields['session_id'] = _sessionId ?? "";
 
       if (kIsWeb) {
         // EN WEB: filePath es una URL Blob, tenemos que descargar los bytes
@@ -230,7 +330,7 @@ class _AgrobotChatWidgetState extends State<AgrobotChatWidget>
   Future<void> _enviarMensaje([String? textoDirecto]) async {
     final texto = textoDirecto ?? _controller.text.trim();
     
-    if ((texto.isEmpty && _imagenSeleccionada == null) || _enviando || _isRecording) return;
+    if ((texto.isEmpty && _imagenSeleccionada == null) || _enviando || _isRecording || _sessionId == null) return;
 
     final imagenAEnviar = _imagenSeleccionada;
     String? base64Image;
@@ -258,7 +358,9 @@ class _AgrobotChatWidgetState extends State<AgrobotChatWidget>
         'POST',
         Uri.parse('$_serverUrl/chatbot/message'),
       );
-      request.headers['Content-Type'] = 'application/json';
+      
+      final headers = await _getAuthHeaders();
+      request.headers.addAll(headers);
       
       request.body = jsonEncode({
         'message': texto,
@@ -484,14 +586,22 @@ class _AgrobotChatWidgetState extends State<AgrobotChatWidget>
   Widget _buildChatArea() {
     return Container(
       color: fondoGris,
-      child: ListView.builder(
-        controller: _scrollController,
-        padding: const EdgeInsets.all(16),
-        itemCount: _mensajes.length,
-        itemBuilder: (context, index) {
-          final msg = _mensajes[index];
-          return _buildBurbuja(msg);
-        },
+      child: Stack(
+        children: [
+          ListView.builder(
+            controller: _scrollController,
+            padding: const EdgeInsets.all(16),
+            itemCount: _mensajes.length,
+            itemBuilder: (context, index) {
+              final msg = _mensajes[index];
+              return _buildBurbuja(msg);
+            },
+          ),
+          if (_cargandoHistorial)
+            const Center(
+              child: CircularProgressIndicator(),
+            ),
+        ],
       ),
     );
   }

@@ -6,7 +6,11 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const speechService = require('../services/speechService');
-const TramitesService = require('../services/tramitesService'); // Import TramitesService here as well for direct use if needed, or ensure it's globally available if not.
+const TramitesService = require('../services/tramitesService'); 
+const { verifyToken } = require('../middlewares/authMiddleware');
+
+// Aplicar middleware de autenticación a TODAS las rutas de este router
+router.use(verifyToken);
 
 // Configurar multer para almacenar archivos de audio temporalmente
 const storage = multer.diskStorage({
@@ -37,7 +41,7 @@ const upload = multer({
   }
 });
 /**
- * Rutas para Chatbot
+ * Rutas para Chatbot (Protegidas por Firebase Auth)
  * Gestión de interacciones con el chatbot de la plataforma ganadera
  */
 
@@ -45,7 +49,9 @@ const upload = multer({
 router.post('/message', async function (req, res, next) {
   try {
     const { message, session_id } = req.body;
-    console.log('Mensaje recibido:', message);
+    const usuario_id = req.user.uid; // Obtenido del token
+
+    console.log(`Mensaje de ${usuario_id}:`, message);
     console.log('Sesión ID:', session_id);
 
     // Configurar SSE (Server-Sent Events)
@@ -76,7 +82,8 @@ router.post('/message', async function (req, res, next) {
     });
 
     // Llamamos al servicio — los chunks se envían en tiempo real
-    await openAIService.completion(session_id, message, sseAdapter);
+    // PASAMOS usuario_id para asegurar asociación en openAIService
+    await openAIService.completion(session_id, message, sseAdapter, usuario_id);
 
     // Señal de fin de stream
     res.write(`data: [DONE]\n\n`);
@@ -94,10 +101,10 @@ router.post('/message', async function (req, res, next) {
   }
 });
 
-// GET /chatbot/historial/:usuario_id - Obtener historial de conversaciones
-router.get('/historial/:usuario_id', async function (req, res, next) {
+// GET /chatbot/historial - Obtener historial de conversaciones del usuario autenticado
+router.get('/historial', async function (req, res, next) {
   try {
-    const { usuario_id } = req.params;
+    const usuario_id = req.user.uid;
     const { limite = 50 } = req.query;
 
     const conversaciones = await chatbotService.getHistorial(usuario_id, limite);
@@ -132,7 +139,7 @@ router.get('/sesion/:sesion_id', async function (req, res, next) {
 // POST /chatbot/sesion/nueva - Iniciar una nueva sesión de chat
 router.post('/sesion/nueva', async function (req, res, next) {
   try {
-    const { usuario_id } = req.body;
+    const usuario_id = req.user.uid;
     const data = await chatbotService.createSesion(usuario_id);
 
     res.status(201).json({ success: true, message: 'Nueva sesión creada', data });
@@ -242,7 +249,9 @@ router.post('/audio-chat', upload.single('audio'), async function (req, res, nex
     }
 
     const { session_id } = req.body;
-    console.log('🎙️ Audio-Chat recibido:', req.file.originalname, `(${(req.file.size / 1024).toFixed(1)}KB)`);
+    const usuario_id = req.user.uid;
+
+    console.log(`🎙️ Audio-Chat de ${usuario_id}:`, req.file.originalname, `(${(req.file.size / 1024).toFixed(1)}KB)`);
 
     // Paso 1: Transcribir audio
     const transcription = await speechService.transcribeFile(req.file.path);
@@ -292,7 +301,7 @@ router.post('/audio-chat', upload.single('audio'), async function (req, res, nex
       res.write(`data: ${JSON.stringify({ event: 'error', error: data.details })}\n\n`);
     });
 
-    await openAIService.completion(session_id, transcription.text, sseAdapter);
+    await openAIService.completion(session_id, transcription.text, sseAdapter, usuario_id);
 
     res.write(`data: [DONE]\n\n`);
     res.end();

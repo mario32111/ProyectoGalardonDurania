@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 // --- LIBRERÍAS DE FIREBASE AGREGADAS ---
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // <--- AUTH AGREGADO
 import 'firebase_options.dart';
+import 'ui/vistas/auth/login_vista.dart'; // <--- IMPORTACIÓN DE LOGIN
 
 // --- TUS IMPORTACIONES DE VISTAS ---
 import 'ui/vistas/dashboard/dashboard_inicio.dart';
@@ -48,7 +50,18 @@ class AgroControlApp extends StatelessWidget {
           elevation: 2,
         ),
       ),
-      home: const PantallaPrincipal(),
+      home: StreamBuilder<User?>(
+        stream: FirebaseAuth.instance.authStateChanges(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Scaffold(body: Center(child: CircularProgressIndicator()));
+          }
+          if (snapshot.hasData) {
+            return const PantallaPrincipal(); // Si hay usuario logueado
+          }
+          return const VistaLogin(); // Si no hay usuario
+        },
+      ),
     );
   }
 }
@@ -216,6 +229,21 @@ class _MenuLateralInternoState extends State<MenuLateralInterno> {
             child: ListView(
               padding: EdgeInsets.zero,
               children: [
+                // --- 0. OPCIÓN INICIO (AHORA AL PRINCIPIO) ---
+                ListTile(
+                  leading: Icon(Icons.dashboard, color: widget.vistaActual == "INICIO" ? azulAgro : Colors.grey),
+                  title: Text(
+                    "Tablero Inicio", 
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: widget.vistaActual == "INICIO" ? azulAgro : Colors.black87
+                    )
+                  ),
+                  onTap: () => widget.onOpcionSeleccionada("INICIO"),
+                ),
+
+                const Divider(),
+
                 // --- 1. GRUPO GANADO ---
                 _buildTituloMenu("Ganado", Icons.grass, azulAgro),
                 if (_menuDesplegado == "Ganado") ...[
@@ -253,11 +281,16 @@ class _MenuLateralInternoState extends State<MenuLateralInterno> {
                   onTap: () => widget.onOpcionSeleccionada("Docs"), 
                 ),
 
-                // --- 4. OPCIÓN INICIO ---
+                const SizedBox(height: 20),
+                const Divider(),
+                
+                // --- BOTÓN CERRAR SESIÓN ---
                 ListTile(
-                  leading: const Icon(Icons.dashboard, color: Colors.grey),
-                  title: const Text("Tablero Inicio", style: TextStyle(fontWeight: FontWeight.bold)),
-                  onTap: () => widget.onOpcionSeleccionada("INICIO"),
+                  leading: const Icon(Icons.logout, color: Colors.grey),
+                  title: const Text("Cerrar Sesión", style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+                  onTap: () async {
+                    await FirebaseAuth.instance.signOut();
+                  },
                 ),
               ],
             ),

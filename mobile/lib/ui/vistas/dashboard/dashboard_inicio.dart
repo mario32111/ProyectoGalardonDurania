@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // <--- AGREGADO PARA FILTRADO Y UID
 
 class VistaDashboardInicio extends StatefulWidget {
   const VistaDashboardInicio({super.key});
@@ -34,15 +35,21 @@ class _VistaDashboardInicioState extends State<VistaDashboardInicio> {
     List<Map<String, dynamic>> alertasReales = [];
 
     try {
-      var ganadoObtenido = await FirebaseFirestore.instance.collection('ganado').get();
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return;
+
+      var ganadoObtenido = await FirebaseFirestore.instance.collection('ganado')
+          .where('usuario_id', isEqualTo: user.uid).get();
       contadorCabezas = ganadoObtenido.docs.length;
 
-      var ventasObtenidas = await FirebaseFirestore.instance.collection('ventas_salidas').get();
+      var ventasObtenidas = await FirebaseFirestore.instance.collection('ventas_salidas')
+          .where('usuario_id', isEqualTo: user.uid).get();
       for (var doc in ventasObtenidas.docs) {
         sumaVentas += (doc.data()['monto_total'] ?? 0.0);
       }
 
-      var inventarioObtenido = await FirebaseFirestore.instance.collection('inventario').get();
+      var inventarioObtenido = await FirebaseFirestore.instance.collection('inventario')
+          .where('usuario_id', isEqualTo: user.uid).get();
       for (var doc in inventarioObtenido.docs) {
         var datos = doc.data();
         String nombreInsumo = datos['nombre'] ?? 'Producto Desconocido';
@@ -241,7 +248,9 @@ class _VistaDashboardInicioState extends State<VistaDashboardInicio> {
                               valorAGuardar = double.tryParse(valorAGuardar) ?? 0.0;
                             }
 
+                            final user = FirebaseAuth.instance.currentUser;
                             await FirebaseFirestore.instance.collection(coleccionBD).add({
+                              'usuario_id': user?.uid ?? 'anonimo',
                               nombreCampo: valorAGuardar,
                               'fecha_registro': FieldValue.serverTimestamp(),
                               'origen': 'Acceso Rápido Dashboard',

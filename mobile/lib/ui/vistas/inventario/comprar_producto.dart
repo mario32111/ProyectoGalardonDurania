@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // <--- AGREGADO PARA UID
 
 class VistaComprarProducto extends StatefulWidget {
   const VistaComprarProducto({super.key});
@@ -52,9 +53,11 @@ class _VistaComprarProductoState extends State<VistaComprarProducto> {
 
     try {
       double cantidadIngresada = double.tryParse(_cantidadController.text.trim()) ?? 0.0;
+      final user = FirebaseAuth.instance.currentUser;
 
       // 2. Guardamos en la colección 'inventario' (La que lee tu pantalla de Stock)
       await FirebaseFirestore.instance.collection('inventario').add({
+        'usuario_id': user?.uid ?? 'anonimo', // Asociar al usuario actual
         'nombre': _nombreController.text.trim(),
         'categoria': _categoriaSeleccionada ?? 'Sin categoría',
         'proveedor': _proveedorController.text.trim(),

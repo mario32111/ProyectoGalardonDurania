@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // <--- AGREGADO PARA UID
 
 class VistaManejoGanado extends StatefulWidget {
   const VistaManejoGanado({super.key});
@@ -16,16 +17,61 @@ class _VistaManejoGanadoState extends State<VistaManejoGanado> {
   final TextEditingController _internoController = TextEditingController();
   final TextEditingController _pesoController = TextEditingController();
   final TextEditingController _tempController = TextEditingController();
+  
+  // --- GESTIÓN DE UPPS DESDE EL MAPA ---
+  List<String> _uppsDisponibles = [];
+  String? _uppSeleccionada; 
+  bool _cargandoUpps = true;
 
   // --- VARIABLE PARA EL BLOQUEO DE SEGURIDAD ---
   bool _estaGuardando = false;
 
+  @override
+  void initState() {
+    super.initState();
+    _obtenerUppsDelMapa();
+  }
+
+  Future<void> _obtenerUppsDelMapa() async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return;
+
+      final snapshot = await FirebaseFirestore.instance
+          .collection('zonas_mapa')
+          .where('usuario_id', isEqualTo: user.uid)
+          .get();
+
+      // Extraemos solo el campo 'upp' y quitamos duplicados
+      final conjuntoUpps = snapshot.docs
+          .map((doc) => doc.data()['upp']?.toString() ?? '')
+          .where((upp) => upp.isNotEmpty)
+          .toSet();
+
+      if (mounted) {
+        setState(() {
+          _uppsDisponibles = conjuntoUpps.toList();
+          _cargandoUpps = false;
+        });
+      }
+    } catch (e) {
+      debugPrint("Error al cargar UPPs: $e");
+      if (mounted) setState(() => _cargandoUpps = false);
+    }
+  }
   // --- FUNCIÓN QUE MANDA LOS DATOS A FIREBASE ---
   Future<void> _guardarEnBD() async {
     // 1. Validamos que al menos pongan el arete SINIIGA
     if (_siniigaController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('El Arete SINIIGA es obligatorio', style: TextStyle(color: Colors.white)), backgroundColor: Colors.red),
+      );
+      return;
+    }
+
+    if (_uppSeleccionada == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Debes seleccionar una UPP válida del mapa', style: TextStyle(color: Colors.white)), backgroundColor: Colors.orange),
       );
       return;
     }
@@ -37,19 +83,24 @@ class _VistaManejoGanadoState extends State<VistaManejoGanado> {
 
     try {
       // 2. Enviamos todo a una colección llamada 'ganado'
+      final user = FirebaseAuth.instance.currentUser;
+      
       await FirebaseFirestore.instance.collection('ganado').add({
+        'usuario_id': user?.uid ?? 'anonimo', // Asociar al usuario actual
+        'upp': _uppSeleccionada,   // <--- USAR UPP SELECCIONADA
         'arete_siniiga': _siniigaController.text.trim(),
         'arete_interno': _internoController.text.trim(),
         // Convertimos el peso y temp a números, si está vacío guardamos 0.0
         'peso_kg': double.tryParse(_pesoController.text.trim()) ?? 0.0,
         'temperatura_c': double.tryParse(_tempController.text.trim()) ?? 0.0,
         'fecha_registro': FieldValue.serverTimestamp(),
-        'apto_exportacion': true, // Listo para tu lógica de exportación
+        'apto_exportacion': true, 
       });
 
       // 3. Limpiamos las cajas para registrar la siguiente vaca
       _siniigaController.clear();
       _internoController.clear();
+      // No limpiamos el selector de UPP para agilizar registros múltiples en el mismo sitio
       _pesoController.clear();
       _tempController.clear();
 
@@ -88,8 +139,32 @@ class _VistaManejoGanadoState extends State<VistaManejoGanado> {
             _buildHeader("MANEJO INDIVIDUAL", "Registro de peso y salud", Icons.analytics_rounded, azulAgro),
             const SizedBox(height: 30),
             
-            _buildCard("Identificación Oficial", Icons.qr_code, [
+            _buildCard("Identificación y Ubicación", Icons.qr_code, [
               _input("Arete SINIIGA", Icons.qr_code, _siniigaController), 
+              const SizedBox(height: 15),
+              
+              // --- NUEVO: SELECTOR DE UPPS DESDE EL MAPA ---
+              _cargandoUpps 
+                ? const LinearProgressIndicator() 
+                : DropdownButtonFormField<String>(
+                    value: _uppSeleccionada,
+                    hint: const Text("Seleccionar UPP de ubicación"),
+                    isExpanded: true,
+                    decoration: InputDecoration(
+                      labelText: "Coto / Zona (UPP)",
+                      prefixIcon: const Icon(Icons.pin, color: Colors.grey),
+                      filled: true, fillColor: const Color(0xFFF8FAFC),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                    ),
+                    items: _uppsDisponibles.map((upp) => DropdownMenuItem(value: upp, child: Text(upp))).toList(),
+                    onChanged: (val) => setState(() => _uppSeleccionada = val),
+                  ),
+              if (!_cargandoUpps && _uppsDisponibles.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.all(8.0),
+                  child: Text("! Registra primero tus zonas en el Mapa !", style: TextStyle(color: Colors.red, fontSize: 11, fontWeight: FontWeight.bold)),
+                ),
+
               const SizedBox(height: 15),
               _input("Arete Interno (Opcional)", Icons.tag, _internoController), 
             ]),

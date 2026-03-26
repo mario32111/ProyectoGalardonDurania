@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // <--- AGREGADO PARA UID
 
 class VistaSalidaVenta extends StatefulWidget {
   const VistaSalidaVenta({super.key});
@@ -16,12 +17,48 @@ class _VistaSalidaVentaState extends State<VistaSalidaVenta> {
   final TextEditingController _destinoController = TextEditingController();
   final TextEditingController _fechaController = TextEditingController();
   final TextEditingController _cabezasController = TextEditingController();
-  final TextEditingController _pesoController = TextEditingController();
-  final TextEditingController _precioController = TextEditingController();
+  final TextEditingController _pesoController = TextEditingController();  final TextEditingController _precioController = TextEditingController();
+  
+  // --- GESTIÓN DE UPPS DESDE EL MAPA ---
+  List<String> _uppsDisponibles = [];
+  String? _uppSeleccionada; 
+  bool _cargandoUpps = true;
 
   double _montoTotal = 0.0;
-  bool _estaGuardando = false; // <--- Nuevo: Controla la ruedita de carga
+  bool _estaGuardando = false; 
 
+  @override
+  void initState() {
+    super.initState();
+    _obtenerUppsDelMapa();
+  }
+
+  Future<void> _obtenerUppsDelMapa() async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return;
+
+      final snapshot = await FirebaseFirestore.instance
+          .collection('zonas_mapa')
+          .where('usuario_id', isEqualTo: user.uid)
+          .get();
+
+      final conjuntoUpps = snapshot.docs
+          .map((doc) => doc.data()['upp']?.toString() ?? '')
+          .where((upp) => upp.isNotEmpty)
+          .toSet();
+
+      if (mounted) {
+        setState(() {
+          _uppsDisponibles = conjuntoUpps.toList();
+          _cargandoUpps = false;
+        });
+      }
+    } catch (e) {
+      debugPrint("Error al cargar UPPs: $e");
+      if (mounted) setState(() => _cargandoUpps = false);
+    }
+  }
   // --- SELECCIONADOR DE FECHA (CALENDARIO) ---
   Future<void> _seleccionarFecha(BuildContext context) async {
     final DateTime? fechaElegida = await showDatePicker(
@@ -70,12 +107,23 @@ class _VistaSalidaVentaState extends State<VistaSalidaVenta> {
       return;
     }
 
+    if (_uppSeleccionada == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Debes seleccionar la UPP de origen desde el mapa'), backgroundColor: Colors.orange),
+      );
+      return;
+    }
+
     setState(() {
       _estaGuardando = true; // Empieza a girar la ruedita
     });
 
     try {
+      final user = FirebaseAuth.instance.currentUser;
+
       await FirebaseFirestore.instance.collection('ventas_salidas').add({
+        'usuario_id': user?.uid ?? 'anonimo', // Asociar al usuario actual
+        'upp_origen': _uppSeleccionada, // <--- USAR UPP SELECCIONADA
         'cliente': _clienteController.text.trim(),
         'destino': _destinoController.text.trim(),
         'fecha_salida': _fechaController.text.trim().isEmpty ? 'Sin fecha' : _fechaController.text.trim(),
@@ -89,6 +137,7 @@ class _VistaSalidaVentaState extends State<VistaSalidaVenta> {
       // Limpiamos todo
       _clienteController.clear();
       _destinoController.clear();
+      // No limpiamos el selector de UPP
       _fechaController.clear();
       _cabezasController.clear();
       _pesoController.clear();
@@ -157,6 +206,30 @@ class _VistaSalidaVentaState extends State<VistaSalidaVenta> {
               child: Column(
                 children: [
                   _campoTexto("Cliente / Comprador", Icons.person_outline, TextInputType.text, _clienteController),
+                  const SizedBox(height: 15),
+                  
+                  // --- NUEVO: SELECTOR DE UPPS ---
+                  _cargandoUpps 
+                    ? const LinearProgressIndicator() 
+                    : DropdownButtonFormField<String>(
+                        value: _uppSeleccionada,
+                        hint: const Text("Seleccionar UPP de origen"),
+                        isExpanded: true,
+                        decoration: InputDecoration(
+                          labelText: "UPP Origen (Mapa)",
+                          prefixIcon: const Icon(Icons.pin, color: Colors.grey),
+                          filled: true, fillColor: const Color(0xFFF8FAFC),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                        ),
+                        items: _uppsDisponibles.map((upp) => DropdownMenuItem(value: upp, child: Text(upp))).toList(),
+                        onChanged: (val) => setState(() => _uppSeleccionada = val),
+                      ),
+                  if (!_cargandoUpps && _uppsDisponibles.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.all(8.0),
+                      child: Text("! Registra primero tus zonas en el Mapa !", style: TextStyle(color: Colors.red, fontSize: 11, fontWeight: FontWeight.bold)),
+                    ),
+
                   const SizedBox(height: 15),
                   _campoTexto("Destino (Rastro/Engorda)", Icons.local_shipping_outlined, TextInputType.text, _destinoController),
                   const SizedBox(height: 15),

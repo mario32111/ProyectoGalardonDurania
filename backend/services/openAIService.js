@@ -93,7 +93,7 @@ class OpenAIService {
         this.client = createAzureClient();
     }
 
-    async getSessionHistory(sesion_id) {
+    async getSessionHistory(sesion_id, usuario_id) {
         if (!sesion_id) return [this.getSystemContext()];
 
         const docRef = db.collection('sesiones').doc(sesion_id);
@@ -101,8 +101,9 @@ class OpenAIService {
 
         if (!doc.exists) {
             const systemContext = this.getSystemContext();
-            // Inicializamos con set
+            // Inicializamos con set, incluyendo el usuario_id obligatorio
             await docRef.set({
+                usuario_id: usuario_id || "SISTEMA", // Respaldamos si no viene, aunque debería venir
                 fecha_inicio: admin.firestore.FieldValue.serverTimestamp(),
                 mensajes: [systemContext]
             });
@@ -160,12 +161,12 @@ class OpenAIService {
         };
     }
 
-    async completion(sesion_id, userMessageContent, ws) {
+    async completion(sesion_id, userMessageContent, ws, usuario_id) {
         // Obtenemos historial DB (async)
         // Usar try/catch para manejar errores de DB
         let history;
         try {
-            history = await this.getSessionHistory(sesion_id);
+            history = await this.getSessionHistory(sesion_id, usuario_id);
         } catch (e) {
             console.error("Error obteniendo historial:", e);
             history = [this.getSystemContext()];

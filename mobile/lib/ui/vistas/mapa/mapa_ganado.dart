@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart'; 
 import 'package:latlong2/latlong.dart'; 
-
+import 'package:cloud_firestore/cloud_firestore.dart'; // <--- AGREGADO PARA FIREBASE
+import 'package:firebase_auth/firebase_auth.dart';     // <--- AGREGADO PARA UID
 class MapaGanado extends StatefulWidget {
   const MapaGanado({super.key});
 
@@ -18,8 +19,61 @@ class _MapaGanadoState extends State<MapaGanado> {
 
   // --- NUEVA VARIABLE: Controla el modo de dibujo ---
   bool _modoRectangulo = false; 
+  bool _esSatelital = true; // <--- Controla la capa del mapa (Satelital vs 2D)
+  bool _estaCargando = true; // <--- Nuevo: Estado de carga
+
+  @override
+  void initState() {
+    super.initState();
+    _cargarZonasDesdeFirebase();
+  }
 
   // ==============================================================================
+  // CARGA DE DATOS DESDE FIREBASE
+  // ==============================================================================
+  Future<void> _cargarZonasDesdeFirebase() async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return;
+
+      final snapshot = await FirebaseFirestore.instance
+          .collection('zonas_mapa')
+          .where('usuario_id', isEqualTo: user.uid)
+          .get();
+
+      final List<Map<String, dynamic>> zonasCargadas = [];
+      for (var doc in snapshot.docs) {
+        final data = doc.data();
+        final List<dynamic> puntosRaw = data['puntos'] ?? [];
+        
+        // Convertimos los puntos de Map {lat, lng} a objetos LatLng
+        final List<LatLng> puntosConvertidos = puntosRaw.map((p) {
+          return LatLng(p['lat'].toDouble(), p['lng'].toDouble());
+        }).toList();
+
+        zonasCargadas.add({
+          'id': doc.id,
+          'nombre': data['nombre'],
+          'upp': data['upp'] ?? 'N/A', // <--- LEER UPP
+          'tipo': data['tipo'],
+          'detalles': data['detalles'],
+          'puntos': puntosConvertidos,
+          'color': _obtenerColorPorTipo(data['tipo']),
+        });
+      }
+
+      if (mounted) {
+        setState(() {
+          _zonasGuardadas.clear();
+          _zonasGuardadas.addAll(zonasCargadas);
+          _estaCargando = false;
+        });
+      }
+    } catch (e) {
+      debugPrint("Error cargando zonas: $e");
+      if (mounted) setState(() => _estaCargando = false);
+    }
+  }  // ==============================================================================
   // LÓGICA DE DIBUJO INTELIGENTE (Libre vs Rectángulo)
   // ==============================================================================
   void _onTapMapa(TapPosition tapPosition, LatLng punto) {
@@ -90,6 +144,7 @@ class _MapaGanadoState extends State<MapaGanado> {
     }
 
     TextEditingController nombreController = TextEditingController();
+    TextEditingController uppController = TextEditingController(); // <--- CONTROLADOR UPP
     String tipoSeleccionado = 'Corral'; 
     String detallesAdicionales = '';
 
@@ -98,6 +153,8 @@ class _MapaGanadoState extends State<MapaGanado> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (BuildContext sheetContext) {
+        bool guardando = false; 
+
         return StatefulBuilder(
           builder: (BuildContext context, StateSetter setModalState) {
             return Container(
@@ -132,6 +189,19 @@ class _MapaGanadoState extends State<MapaGanado> {
                         filled: true, fillColor: Colors.grey[100],
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
                         prefixIcon: const Icon(Icons.edit_location_alt, color: Colors.grey),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+
+                    const Text("Identificador UPP", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black54)),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: uppController,
+                      decoration: InputDecoration(
+                        hintText: "Ej. 10-092-001-001",
+                        filled: true, fillColor: Colors.grey[100],
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                        prefixIcon: const Icon(Icons.pin, color: Colors.grey),
                       ),
                     ),
                     const SizedBox(height: 20),
@@ -175,27 +245,62 @@ class _MapaGanadoState extends State<MapaGanado> {
                           backgroundColor: Colors.green[800],
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         ),
-                        onPressed: () {
+                        onPressed: () async {
                           if (nombreController.text.isEmpty) {
                             ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Por favor, ingresa un nombre.'), backgroundColor: Colors.red));
                             return;
                           }
 
-                          setState(() {
-                            _zonasGuardadas.add({
-                              'nombre': nombreController.text,
-                              'tipo': tipoSeleccionado,
-                              'detalles': detallesAdicionales,
-                              'puntos': List<LatLng>.from(_puntosPoligono), 
-                              'color': _obtenerColorPorTipo(tipoSeleccionado),
-                            });
-                            _puntosPoligono.clear();
+                          setModalState(() {
+                            guardando = true;
                           });
 
-                          Navigator.pop(context);
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Zona registrada exitosamente.'), backgroundColor: Colors.green));
+                          try {
+                            final user = FirebaseAuth.instance.currentUser;
+                            if (user == null) return;
+
+                            // Preparamos los puntos para Firestore (lista de mapas)
+                            final puntosParaFirebase = _puntosPoligono.map((p) => {
+                              'lat': p.latitude,
+                              'lng': p.longitude,
+                            }).toList();
+
+                            // GUARDAMOS EN FIREBASE
+                            final docRef = await FirebaseFirestore.instance.collection('zonas_mapa').add({
+                              'usuario_id': user.uid,
+                              'nombre': nombreController.text.trim(),
+                              'upp': uppController.text.trim(), // <--- GUARDAR UPP
+                              'tipo': tipoSeleccionado,
+                              'detalles': detallesAdicionales,
+                              'puntos': puntosParaFirebase,
+                              'fecha_creacion': FieldValue.serverTimestamp(),
+                            });
+
+                            if (mounted) {
+                              setState(() {
+                                _zonasGuardadas.add({
+                                  'id': docRef.id,
+                                  'nombre': nombreController.text,
+                                  'upp': uppController.text.trim(), // <--- LOCAL UPP
+                                  'tipo': tipoSeleccionado,
+                                  'detalles': detallesAdicionales,
+                                  'puntos': List<LatLng>.from(_puntosPoligono), 
+                                  'color': _obtenerColorPorTipo(tipoSeleccionado),
+                                });
+                                _puntosPoligono.clear();
+                              });
+                            }
+
+                            Navigator.pop(context);
+                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Zona guardada en la nube.'), backgroundColor: Colors.green));
+                          } catch (e) {
+                            setModalState(() => guardando = false);
+                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error al guardar: $e'), backgroundColor: Colors.red));
+                          }
                         },
-                        child: const Text("GUARDAR EN EL MAPA", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                        child: guardando 
+                          ? const CircularProgressIndicator(color: Colors.white)
+                          : const Text("GUARDAR EN EL MAPA", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
                       ),
                     ),
                     const SizedBox(height: 25),
@@ -235,6 +340,8 @@ class _MapaGanadoState extends State<MapaGanado> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            Text("UPP: ${zona['upp']}", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blueGrey)),
+            const SizedBox(height: 5),
             Text("Tipo: ${zona['tipo']}", style: const TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 10),
             Text("Detalles: ${zona['detalles'].isNotEmpty ? zona['detalles'] : 'Ninguno.'}"),
@@ -281,6 +388,11 @@ class _MapaGanadoState extends State<MapaGanado> {
         backgroundColor: Colors.green[800],
         foregroundColor: Colors.white,
         actions: [
+          if (_estaCargando)
+            const Padding(
+              padding: EdgeInsets.all(12.0),
+              child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)),
+            ),
           if (_puntosPoligono.isNotEmpty)
             IconButton(
               icon: const Icon(Icons.delete_sweep),
@@ -301,7 +413,10 @@ class _MapaGanadoState extends State<MapaGanado> {
             ),
             children: [
               TileLayer(
-                urlTemplate: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+                urlTemplate: _esSatelital 
+                  ? 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
+                  : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+                subdomains: _esSatelital ? const [] : const ['a', 'b', 'c'],
                 userAgentPackageName: 'com.agro.control',
               ),
 
@@ -359,6 +474,50 @@ class _MapaGanadoState extends State<MapaGanado> {
                   child: const Icon(Icons.remove, color: Colors.black87),
                 ),
               ],
+            ),
+          ),
+
+          // --- BOTÓN TIPO DE MAPA (ESTILO GOOGLE MAPS - ARRIBA IZQUIERDA) ---
+          Positioned(
+            left: 20,
+            top: 90, // <--- Movido arriba para evitar solapamiento con instrucciones
+            child: GestureDetector(
+              onTap: () => setState(() => _esSatelital = !_esSatelital),
+              child: Container(
+                width: 65,
+                height: 65,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.white, width: 2),
+                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 8)],
+                  image: DecorationImage(
+                    image: NetworkImage(
+                      _esSatelital 
+                        ? 'https://tile.openstreetmap.org/15/8800/12500.png' // Miniatura 2D
+                        : 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/15/12500/8800' // Miniatura Satelital
+                    ),
+                    fit: BoxFit.cover,
+                  ),
+                ),
+                child: Container(
+                  alignment: Alignment.bottomCenter,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(10),
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [Colors.transparent, Colors.black.withOpacity(0.6)],
+                    ),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 2),
+                    child: Text(
+                      _esSatelital ? "2D" : "Satélite", 
+                      style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)
+                    ),
+                  ),
+                ),
+              ),
             ),
           ),
 

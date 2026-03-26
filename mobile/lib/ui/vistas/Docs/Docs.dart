@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart'; // <--- IMPORTAMOS FIREBASE
+import 'package:cloud_firestore/cloud_firestore.dart'; 
+import 'package:firebase_auth/firebase_auth.dart'; // <--- AGREGADO PARA UID
 
 const Map<String, Map<String, dynamic>> tramiteTypes = {
   'PRUEBAS_GANADO': {
@@ -162,10 +163,11 @@ class _VistaTramitesVentanillaState extends State<VistaTramitesVentanilla> {
                             String dtIso = DateTime.now().toIso8601String();
 
                             // GUARDAMOS EN LA COLECCIÓN 'tramites' CON ESTRUCTURA DEL BACKEND
+                            final user = FirebaseAuth.instance.currentUser;
                             await FirebaseFirestore.instance.collection('tramites').add({
                               'numero_tramite': folioGenerado,
                               'tipo': tipoSeleccionado,
-                              'usuario_id': 'app-user',
+                              'usuario_id': user?.uid ?? 'anonimo',
                               'ganado_ids': [],
                               'fecha_solicitud': dtIso,
                               'etapa_actual': 1,
