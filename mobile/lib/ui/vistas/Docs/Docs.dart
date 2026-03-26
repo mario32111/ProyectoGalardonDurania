@@ -1,6 +1,43 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart'; // <--- IMPORTAMOS FIREBASE
 
+const Map<String, Map<String, dynamic>> tramiteTypes = {
+  'PRUEBAS_GANADO': {
+    'nombre': 'Pruebas de Ganado',
+    'etapas': [
+      {'orden': 1, 'nombre': 'Solicitud Recibida'},
+      {'orden': 2, 'nombre': 'Programación de Visita'},
+      {'orden': 3, 'nombre': 'Toma de Muestras'},
+      {'orden': 4, 'nombre': 'Muestras en Laboratorio'},
+      {'orden': 5, 'nombre': 'Resultados Disponibles'},
+      {'orden': 6, 'nombre': 'Finalizado'}
+    ]
+  },
+  'MOVILIZACION': {
+    'nombre': 'Trámite de Movilización',
+    'etapas': [
+      {'orden': 1, 'nombre': 'Solicitud Recibida'},
+      {'orden': 2, 'nombre': 'Revisión Documental'},
+      {'orden': 3, 'nombre': 'Inspección Sanitaria'},
+      {'orden': 4, 'nombre': 'Aprobación Pendiente'},
+      {'orden': 5, 'nombre': 'Guía Emitida'},
+      {'orden': 6, 'nombre': 'Finalizado'}
+    ]
+  },
+  'EXPORTACION': {
+    'nombre': 'Trámite de Exportación',
+    'etapas': [
+      {'orden': 1, 'nombre': 'Solicitud Recibida'},
+      {'orden': 2, 'nombre': 'Revisión Documental'},
+      {'orden': 3, 'nombre': 'Certificaciones Sanitarias'},
+      {'orden': 4, 'nombre': 'Inspección Aduanal'},
+      {'orden': 5, 'nombre': 'Aprobación SENASA'},
+      {'orden': 6, 'nombre': 'Documentación Lista'},
+      {'orden': 7, 'nombre': 'Finalizado'}
+    ]
+  }
+};
+
 class VistaTramitesVentanilla extends StatefulWidget {
   const VistaTramitesVentanilla({super.key});
 
@@ -14,13 +51,12 @@ class _VistaTramitesVentanillaState extends State<VistaTramitesVentanilla> {
 
   // --- LÓGICA DE ESTILOS SEGÚN EL ESTADO DEL TRÁMITE ---
   Map<String, dynamic> _obtenerEstiloEstado(String estado) {
-    switch (estado.toLowerCase()) {
-      case 'recibido en ventanilla': return {'color': Colors.orange, 'icono': Icons.inbox, 'paso': 0};
-      case 'en revisión': return {'color': Colors.blue, 'icono': Icons.search, 'paso': 1};
-      case 'requiere corrección': return {'color': Colors.red, 'icono': Icons.error_outline, 'paso': 2};
-      case 'aprobado': return {'color': Colors.green, 'icono': Icons.check_circle_outline, 'paso': 2};
-      case 'listo para recoger': return {'color': Colors.green, 'icono': Icons.check_circle, 'paso': 3};
-      default: return {'color': Colors.grey, 'icono': Icons.help_outline, 'paso': 0};
+    switch (estado.toUpperCase()) {
+      case 'PENDIENTE': return {'color': Colors.orange, 'icono': Icons.inbox};
+      case 'EN_PROCESO': return {'color': Colors.blue, 'icono': Icons.autorenew};
+      case 'COMPLETADO': return {'color': Colors.green, 'icono': Icons.check_circle};
+      case 'CANCELADO': return {'color': Colors.red, 'icono': Icons.cancel};
+      default: return {'color': Colors.grey, 'icono': Icons.help_outline};
     }
   }
 
@@ -72,13 +108,12 @@ class _VistaTramitesVentanillaState extends State<VistaTramitesVentanilla> {
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
                       ),
                       hint: const Text("Selecciona una opción"),
-                      items: [
-                        "Guía de Tránsito (Movilización)",
-                        "Alta de Aretes SINIIGA",
-                        "Actualización de UPP",
-                        "Constancia de Productor",
-                        "Otro documento"
-                      ].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+                      items: tramiteTypes.entries.map((entry) {
+                        return DropdownMenuItem<String>(
+                          value: entry.key,
+                          child: Text(entry.value['nombre']),
+                        );
+                      }).toList(),
                       onChanged: (val) {
                         setModalState(() {
                           tipoSeleccionado = val;
@@ -122,21 +157,30 @@ class _VistaTramitesVentanillaState extends State<VistaTramitesVentanilla> {
                           });
 
                           try {
-                            // Generamos un folio aleatorio simple (ej. TRM-8492)
-                            String folioGenerado = 'TRM-${(1000 + (DateTime.now().millisecondsSinceEpoch % 9000)).toString()}';
-                            
-                            // Formateamos la fecha actual manualmente para no meter más librerías (DD/MM/YYYY)
-                            DateTime hoy = DateTime.now();
-                            String fechaFormateada = "${hoy.day.toString().padLeft(2, '0')}/${hoy.month.toString().padLeft(2, '0')}/${hoy.year}";
+                            String r = (1000 + (DateTime.now().millisecondsSinceEpoch % 9000)).toString();
+                            String folioGenerado = 'TRM-2026-$r';
+                            String dtIso = DateTime.now().toIso8601String();
 
-                            // GUARDAMOS EN LA COLECCIÓN 'tramites'
+                            // GUARDAMOS EN LA COLECCIÓN 'tramites' CON ESTRUCTURA DEL BACKEND
                             await FirebaseFirestore.instance.collection('tramites').add({
-                              'folio': folioGenerado,
-                              'tipo_tramite': tipoSeleccionado,
-                              'fecha_solicitud': fechaFormateada,
-                              'estado': 'Recibido en ventanilla', // Estado inicial por defecto
+                              'numero_tramite': folioGenerado,
+                              'tipo': tipoSeleccionado,
+                              'usuario_id': 'app-user',
+                              'ganado_ids': [],
+                              'fecha_solicitud': dtIso,
+                              'etapa_actual': 1,
+                              'estado': 'PENDIENTE',
                               'observaciones': detallesController.text.isEmpty ? 'Solicitud enviada exitosamente.' : detallesController.text,
-                              'timestamp': FieldValue.serverTimestamp(), // Para ordenarlos del más nuevo al más viejo
+                              'documentos': [],
+                              'historial': [{
+                                'etapa': 1,
+                                'nombre': 'Solicitud Recibida',
+                                'fecha_inicio': dtIso,
+                                'responsable': 'Aplicación Móvil',
+                                'observaciones': 'Trámite creado desde la app'
+                              }],
+                              'observaciones_list': [],
+                              'timestamp': FieldValue.serverTimestamp(),
                             });
 
                             if (mainContext.mounted) {
@@ -169,11 +213,15 @@ class _VistaTramitesVentanillaState extends State<VistaTramitesVentanilla> {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
       
-      floatingActionButton: FloatingActionButton.extended(
-        backgroundColor: azulAgro,
-        onPressed: () => _mostrarFormularioNuevoTramite(context),
-        icon: const Icon(Icons.note_add, color: Colors.white),
-        label: const Text("Nuevo Trámite", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+      floatingActionButton: Padding(
+        padding: const EdgeInsets.only(right: 75.0),
+        child: FloatingActionButton.extended(
+          backgroundColor: azulAgro,
+          onPressed: () => _mostrarFormularioNuevoTramite(context),
+          icon: const Icon(Icons.note_add, color: Colors.white),
+          label: const Text("Nuevo Trámite", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        ),
       ),
 
       body: Padding(
@@ -207,9 +255,11 @@ class _VistaTramitesVentanillaState extends State<VistaTramitesVentanilla> {
                 children: [
                   _filtroChip("Todos"),
                   const SizedBox(width: 10),
+                  _filtroChip("Pendiente"),
+                  const SizedBox(width: 10),
                   _filtroChip("En Proceso"),
                   const SizedBox(width: 10),
-                  _filtroChip("Listos para Recoger"),
+                  _filtroChip("Finalizado"),
                 ],
               ),
             ),
@@ -242,9 +292,10 @@ class _VistaTramitesVentanillaState extends State<VistaTramitesVentanilla> {
                   var todosLosTramites = snapshot.data!.docs.map((doc) => doc.data() as Map<String, dynamic>).toList();
                   
                   List<Map<String, dynamic>> tramitesFiltrados = todosLosTramites.where((tramite) {
-                    String estado = (tramite['estado'] ?? '').toString().toLowerCase();
-                    if (_filtroActual == "En Proceso") return estado != 'listo para recoger' && estado != 'aprobado';
-                    if (_filtroActual == "Listos para Recoger") return estado == 'listo para recoger' || estado == 'aprobado';
+                    String estado = (tramite['estado'] ?? '').toString().toUpperCase();
+                    if (_filtroActual == "Pendiente") return estado == 'PENDIENTE';
+                    if (_filtroActual == "En Proceso") return estado == 'EN_PROCESO';
+                    if (_filtroActual == "Finalizado") return estado == 'COMPLETADO' || estado == 'CANCELADO';
                     return true;
                   }).toList();
 
@@ -281,35 +332,42 @@ class _VistaTramitesVentanillaState extends State<VistaTramitesVentanilla> {
   }
 
   // ==========================================================
-  // WIDGET DE LA BARRA DE SEGUIMIENTO (Línea de tiempo)
+  // WIDGET DE LA BARRA DE SEGUIMIENTO (Línea de tiempo dinámica)
   // ==========================================================
-  Widget _construirBarraSeguimiento(int pasoActual, bool esError) {
+  Widget _construirBarraProgreso(String tipo, int etapaActual) {
+    var info = tramiteTypes[tipo];
+    if (info == null) return const SizedBox();
+
+    List<dynamic> etapas = info['etapas'];
+    
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 15),
-      child: Row(
-        children: [
-          _construirPasoIndicador("Recibido", 0, pasoActual, esError),
-          _construirLinea(0, pasoActual),
-          _construirPasoIndicador("Revisión", 1, pasoActual, esError),
-          _construirLinea(1, pasoActual),
-          _construirPasoIndicador(esError ? "Corrección" : "Aprobado", 2, pasoActual, esError),
-          _construirLinea(2, pasoActual),
-          _construirPasoIndicador("Listo", 3, pasoActual, esError),
-        ],
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: List.generate(etapas.length * 2 - 1, (index) {
+            if (index % 2 == 0) {
+              int pasoIndex = index ~/ 2;
+              var etapa = etapas[pasoIndex];
+              return _construirPasoIndicador(etapa['nombre'], etapa['orden'], etapaActual);
+            } else {
+              int pasoIndex = index ~/ 2;
+              return _construirLinea(etapas[pasoIndex]['orden'], etapaActual);
+            }
+          }),
+        ),
       ),
     );
   }
 
-  Widget _construirPasoIndicador(String titulo, int indicePaso, int pasoActual, bool esError) {
+  Widget _construirPasoIndicador(String titulo, int indicePaso, int pasoActual) {
     bool completado = indicePaso <= pasoActual;
     bool actual = indicePaso == pasoActual;
     
-    Color colorPaso = completado 
-        ? (esError && actual ? Colors.red : azulAgro) 
-        : Colors.grey[300]!;
+    Color colorPaso = completado ? azulAgro : Colors.grey[300]!;
 
-    return Expanded(
-      flex: 2,
+    return SizedBox(
+      width: 70,
       child: Column(
         children: [
           Container(
@@ -321,7 +379,7 @@ class _VistaTramitesVentanillaState extends State<VistaTramitesVentanilla> {
               border: Border.all(color: completado ? colorPaso : Colors.grey[300]!, width: 2)
             ),
             child: completado 
-                ? Icon(esError && actual ? Icons.close : Icons.check, size: 14, color: Colors.white) 
+                ? const Icon(Icons.check, size: 14, color: Colors.white) 
                 : null,
           ),
           const SizedBox(height: 5),
@@ -342,13 +400,11 @@ class _VistaTramitesVentanillaState extends State<VistaTramitesVentanilla> {
 
   Widget _construirLinea(int indicePaso, int pasoActual) {
     bool completado = indicePaso < pasoActual;
-    return Expanded(
-      flex: 3,
-      child: Container(
-        height: 2,
-        color: completado ? azulAgro : Colors.grey[200],
-        margin: const EdgeInsets.only(bottom: 20), 
-      ),
+    return Container(
+      width: 30,
+      height: 2,
+      color: completado ? azulAgro : Colors.grey[200],
+      margin: const EdgeInsets.only(bottom: 20, left: 5, right: 5), 
     );
   }
 
@@ -356,13 +412,20 @@ class _VistaTramitesVentanillaState extends State<VistaTramitesVentanilla> {
   // WIDGET DE LA TARJETA PRINCIPAL
   // ==========================================================
   Widget _tarjetaTramite(Map<String, dynamic> datos) {
-    String estado = datos['estado'] ?? 'Desconocido';
+    String estado = datos['estado'] ?? 'PENDIENTE';
     var estilo = _obtenerEstiloEstado(estado);
     
     Color colorEstado = estilo['color'];
     IconData iconoEstado = estilo['icono'];
-    int pasoActual = estilo['paso'];
-    bool esError = estado.toLowerCase() == 'requiere corrección';
+    
+    String tipo = datos['tipo'] ?? '';
+    String tituloTipo = tramiteTypes[tipo]?['nombre'] ?? 'Desconocido';
+    int etapaActual = datos['etapa_actual'] ?? 1;
+
+    String fechaVisual = "";
+    if (datos['fecha_solicitud'] != null) {
+      fechaVisual = datos['fecha_solicitud'].toString().split('T').first;
+    }
 
     return Container(
       margin: const EdgeInsets.only(bottom: 20),
@@ -379,19 +442,19 @@ class _VistaTramitesVentanillaState extends State<VistaTramitesVentanilla> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Expanded(child: Text(datos['tipo_tramite'] ?? 'Trámite', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.black87), overflow: TextOverflow.ellipsis)),
+              Expanded(child: Text(tituloTipo, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.black87), overflow: TextOverflow.ellipsis)),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                 decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(8)),
-                child: Text("Folio: ${datos['folio'] ?? '---'}", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey[700], fontSize: 12)),
+                child: Text("Folio: ${datos['numero_tramite'] ?? '---'}", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey[700], fontSize: 12)),
               )
             ],
           ),
           const SizedBox(height: 10),
-          Row(children: [const Icon(Icons.calendar_today, size: 14, color: Colors.grey), const SizedBox(width: 5), Text("Iniciado el: ${datos['fecha_solicitud']}", style: const TextStyle(color: Colors.grey, fontSize: 13))]),
+          Row(children: [const Icon(Icons.calendar_today, size: 14, color: Colors.grey), const SizedBox(width: 5), Text("Iniciado el: $fechaVisual", style: const TextStyle(color: Colors.grey, fontSize: 13))]),
           
           const Divider(height: 20),
-          _construirBarraSeguimiento(pasoActual, esError),
+          _construirBarraProgreso(tipo, etapaActual),
           const Divider(height: 20),
 
           Row(
