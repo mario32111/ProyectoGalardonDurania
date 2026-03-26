@@ -1,16 +1,18 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io' show File; // Se especifica para evitar conflictos (dart:io no se debe usar directamente en web para File.path etc)
+import 'dart:io'
+    show
+        File; // Se especifica para evitar conflictos (dart:io no se debe usar directamente en web para File.path etc)
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb; // PARA DETECTAR NAVEGADOR
 import 'package:http/http.dart' as http;
 import 'package:uuid/uuid.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:record/record.dart'; 
-import 'package:path_provider/path_provider.dart'; 
-import 'package:permission_handler/permission_handler.dart'; 
-import 'package:http_parser/http_parser.dart'; 
-import 'package:firebase_auth/firebase_auth.dart'; // <--- NUEVO: AUTH DE FIREBASE 
+import 'package:record/record.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:http_parser/http_parser.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // <--- NUEVO: AUTH DE FIREBASE
 
 /// Modelo simple para cada mensaje del chat
 class ChatMessage {
@@ -18,8 +20,9 @@ class ChatMessage {
   String texto;
   bool isStreaming; // true mientras se reciben chunks
   XFile? imagen; // USAR XFILE PARA COMPATIBILIDAD WEB
-  bool isAudio; 
-  Map<String, dynamic>? action; // <--- NUEVO: Para acciones como UPLOAD_REQUIRED
+  bool isAudio;
+  Map<String, dynamic>?
+  action; // <--- NUEVO: Para acciones como UPLOAD_REQUIRED
   bool isUploading; // <--- NUEVO: Estado de carga del archivo vinculado
   bool actionCompleted; // <--- NUEVO: Si la acción ya se realizó
 
@@ -53,21 +56,21 @@ class _AgrobotChatWidgetState extends State<AgrobotChatWidget>
   // ══════════════════════════════════════════════════════════
   //   CONFIGURACIÓN — CAMBIA ESTO A LA URL DE TU SERVIDOR
   // ══════════════════════════════════════════════════════════
-  // En Web, si corres en local, 'localhost' está OK. 
+  // En Web, si corres en local, 'localhost' está OK.
   // Si apuntas a una IP externa, asegúrate de actualizarlo.
   // Cambia 'localhost' por tu IP real
-  static const String _serverUrl = 'http://192.168.1.72:3000'; 
+  static const String _serverUrl = 'http://192.168.15.84:3000';
 
   // ══════════════════════════════════════════════════════════
 
-  String? _sessionId; 
-  bool _cargandoHistorial = false; 
+  String? _sessionId;
+  bool _cargandoHistorial = false;
   bool _enviando = false;
   http.Client? _httpClient;
-  
+
   // --- HISTORIAL DE SESIONES ---
   List<dynamic> _listaSesiones = [];
-  bool _mostrandoHistorial = false; 
+  bool _mostrandoHistorial = false;
   bool _estaEliminando = false;
 
   // --- VARIABLES PARA LA CÁMARA/GALERÍA ---
@@ -117,23 +120,23 @@ class _AgrobotChatWidgetState extends State<AgrobotChatWidget>
   /// Carga la lista completa de sesiones y el historial de la última
   Future<void> _cargarHistorial() async {
     setState(() => _cargandoHistorial = true);
-    
+
     try {
       final headers = await _getAuthHeaders();
       if (headers.isEmpty) {
-         _finalizarCargaHistorial();
-         return;
+        _finalizarCargaHistorial();
+        return;
       }
 
       final response = await http.get(
-        Uri.parse('$_serverUrl/chatbot/historial?limite=20'), 
+        Uri.parse('$_serverUrl/chatbot/historial?limite=20'),
         headers: headers,
       );
 
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = jsonDecode(response.body);
         final List sesiones = data['data']['conversaciones'] ?? [];
-        
+
         setState(() {
           _listaSesiones = sesiones;
         });
@@ -166,10 +169,12 @@ class _AgrobotChatWidgetState extends State<AgrobotChatWidget>
       _mensajes.clear();
       for (var m in mensajesRaw) {
         if (m['role'] == 'system') continue;
-        _mensajes.add(ChatMessage(
-          emisor: m['role'] == 'user' ? 'user' : 'bot',
-          texto: m['content'] ?? '',
-        ));
+        _mensajes.add(
+          ChatMessage(
+            emisor: m['role'] == 'user' ? 'user' : 'bot',
+            texto: m['content'] ?? '',
+          ),
+        );
       }
     });
     _moverAlFinal();
@@ -212,7 +217,7 @@ class _AgrobotChatWidgetState extends State<AgrobotChatWidget>
           });
           _crearNuevaSesion();
         }
-        _cargarHistorial(); 
+        _cargarHistorial();
       }
     } catch (e) {
       debugPrint('Error eliminando sesión: $e');
@@ -225,10 +230,13 @@ class _AgrobotChatWidgetState extends State<AgrobotChatWidget>
     if (mounted) {
       setState(() => _cargandoHistorial = false);
       if (_mensajes.isEmpty) {
-        _mensajes.add(ChatMessage(
-          emisor: 'bot',
-          texto: '¡Hola! 👋 Soy **AgroBot**, tu asistente ganadero. ¿Cómo puedo ayudarte hoy?',
-        ));
+        _mensajes.add(
+          ChatMessage(
+            emisor: 'bot',
+            texto:
+                '¡Hola! 👋 Soy **AgroBot**, tu asistente ganadero. ¿Cómo puedo ayudarte hoy?',
+          ),
+        );
       }
     }
   }
@@ -244,12 +252,12 @@ class _AgrobotChatWidgetState extends State<AgrobotChatWidget>
         final data = jsonDecode(response.body);
         setState(() {
           _sessionId = data['data']['sesion_id'];
-          _mensajes.clear(); 
+          _mensajes.clear();
           _mostrandoHistorial = false;
         });
         _cargarHistorial(); // Refrescar lista
       } else {
-         setState(() => _sessionId = const Uuid().v4());
+        setState(() => _sessionId = const Uuid().v4());
       }
     } catch (e) {
       setState(() => _sessionId = const Uuid().v4());
@@ -272,8 +280,11 @@ class _AgrobotChatWidgetState extends State<AgrobotChatWidget>
 
   // Abre la galería y guarda la foto
   Future<void> _seleccionarImagen() async {
-    final XFile? foto = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 70);
-    
+    final XFile? foto = await _picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 70,
+    );
+
     if (foto != null) {
       setState(() {
         _imagenSeleccionada = foto;
@@ -294,11 +305,14 @@ class _AgrobotChatWidgetState extends State<AgrobotChatWidget>
     if (!kIsWeb) {
       final status = await Permission.microphone.request();
       if (status != PermissionStatus.granted) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Permiso de micrófono denegado.')));
+        if (mounted)
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Permiso de micrófono denegado.')),
+          );
         return;
       }
     }
-    
+
     String path = '';
     RecordConfig config;
 
@@ -330,7 +344,7 @@ class _AgrobotChatWidgetState extends State<AgrobotChatWidget>
     setState(() {
       _isRecording = false;
     });
-    
+
     if (path != null) {
       _enviarAudio(path);
     }
@@ -343,7 +357,13 @@ class _AgrobotChatWidgetState extends State<AgrobotChatWidget>
     _focusNode.unfocus();
 
     setState(() {
-      _mensajes.add(ChatMessage(emisor: 'user', texto: '🎙️ Enviando audio...', isAudio: true));
+      _mensajes.add(
+        ChatMessage(
+          emisor: 'user',
+          texto: '🎙️ Enviando audio...',
+          isAudio: true,
+        ),
+      );
       _mensajes.add(ChatMessage(emisor: 'bot', texto: '', isStreaming: true));
       _enviando = true;
     });
@@ -351,8 +371,11 @@ class _AgrobotChatWidgetState extends State<AgrobotChatWidget>
 
     try {
       _httpClient = http.Client();
-      var request = http.MultipartRequest('POST', Uri.parse('$_serverUrl/chatbot/audio-chat'));
-      
+      var request = http.MultipartRequest(
+        'POST',
+        Uri.parse('$_serverUrl/chatbot/audio-chat'),
+      );
+
       // AGREGAR TOKEN A MULTIPART
       final headers = await _getAuthHeaders();
       request.headers.addAll(headers);
@@ -363,19 +386,23 @@ class _AgrobotChatWidgetState extends State<AgrobotChatWidget>
         // EN WEB: filePath es una URL Blob, tenemos que descargar los bytes
         final response = await http.get(Uri.parse(filePath));
         final bytes = response.bodyBytes;
-        request.files.add(http.MultipartFile.fromBytes(
-          'audio', 
-          bytes,
-          filename: 'recording.webm',
-          contentType: MediaType('audio', 'webm'),
-        ));
+        request.files.add(
+          http.MultipartFile.fromBytes(
+            'audio',
+            bytes,
+            filename: 'recording.webm',
+            contentType: MediaType('audio', 'webm'),
+          ),
+        );
       } else {
         // EN MOVIL: filePath es una ruta al sitema de archivos
-        request.files.add(await http.MultipartFile.fromPath(
-          'audio', 
-          filePath,
-          contentType: MediaType('audio', 'm4a'),
-        ));
+        request.files.add(
+          await http.MultipartFile.fromPath(
+            'audio',
+            filePath,
+            contentType: MediaType('audio', 'm4a'),
+          ),
+        );
       }
 
       final streamedResponse = await _httpClient!.send(request);
@@ -385,7 +412,7 @@ class _AgrobotChatWidgetState extends State<AgrobotChatWidget>
         _finalizarConError('Error del servidor: $errorText');
         return;
       }
-      
+
       final responseStream = http.ByteStream(streamedResponse.stream);
       await _leerSSEStream(responseStream);
     } catch (e) {
@@ -399,8 +426,12 @@ class _AgrobotChatWidgetState extends State<AgrobotChatWidget>
   // Enviar Texto / Imagen
   Future<void> _enviarMensaje([String? textoDirecto]) async {
     final texto = textoDirecto ?? _controller.text.trim();
-    
-    if ((texto.isEmpty && _imagenSeleccionada == null) || _enviando || _isRecording || _sessionId == null) return;
+
+    if ((texto.isEmpty && _imagenSeleccionada == null) ||
+        _enviando ||
+        _isRecording ||
+        _sessionId == null)
+      return;
 
     final imagenAEnviar = _imagenSeleccionada;
     String? base64Image;
@@ -414,12 +445,14 @@ class _AgrobotChatWidgetState extends State<AgrobotChatWidget>
     _focusNode.unfocus();
 
     setState(() {
-      _imagenSeleccionada = null; 
-      _mensajes.add(ChatMessage(emisor: 'user', texto: texto, imagen: imagenAEnviar));
+      _imagenSeleccionada = null;
+      _mensajes.add(
+        ChatMessage(emisor: 'user', texto: texto, imagen: imagenAEnviar),
+      );
       _mensajes.add(ChatMessage(emisor: 'bot', texto: '', isStreaming: true));
       _enviando = true;
     });
-    
+
     _moverAlFinal();
 
     try {
@@ -428,10 +461,10 @@ class _AgrobotChatWidgetState extends State<AgrobotChatWidget>
         'POST',
         Uri.parse('$_serverUrl/chatbot/message'),
       );
-      
+
       final headers = await _getAuthHeaders();
       request.headers.addAll(headers);
-      
+
       request.body = jsonEncode({
         'message': texto,
         'session_id': _sessionId,
@@ -465,7 +498,7 @@ class _AgrobotChatWidgetState extends State<AgrobotChatWidget>
 
       for (final line in lines) {
         if (!line.startsWith('data: ')) continue;
-        final raw = line.substring(6).trim(); 
+        final raw = line.substring(6).trim();
 
         if (raw == '[DONE]') {
           if (mounted) {
@@ -507,14 +540,14 @@ class _AgrobotChatWidgetState extends State<AgrobotChatWidget>
                 });
               }
               break;
-            case 'transcription': 
+            case 'transcription':
               if (mounted) {
                 setState(() {
                   if (_mensajes.length >= 2) {
-                     final userMsg = _mensajes[_mensajes.length - 2];
-                     if(userMsg.isAudio) {
-                       userMsg.texto = '🎙️ "${parsed['text']}"';
-                     }
+                    final userMsg = _mensajes[_mensajes.length - 2];
+                    if (userMsg.isAudio) {
+                      userMsg.texto = '🎙️ "${parsed['text']}"';
+                    }
                   }
                 });
               }
@@ -562,7 +595,10 @@ class _AgrobotChatWidgetState extends State<AgrobotChatWidget>
     if (tramiteId == null) return;
 
     // 1. Seleccionar archivo
-    final XFile? file = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
+    final XFile? file = await _picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 80,
+    );
     if (file == null) return;
 
     setState(() {
@@ -571,7 +607,10 @@ class _AgrobotChatWidgetState extends State<AgrobotChatWidget>
 
     try {
       final headers = await _getAuthHeaders();
-      var request = http.MultipartRequest('POST', Uri.parse('$_serverUrl/upload'));
+      var request = http.MultipartRequest(
+        'POST',
+        Uri.parse('$_serverUrl/upload'),
+      );
       request.headers.addAll(headers);
 
       request.fields['tramite_id'] = tramiteId;
@@ -579,7 +618,9 @@ class _AgrobotChatWidgetState extends State<AgrobotChatWidget>
 
       if (kIsWeb) {
         final bytes = await file.readAsBytes();
-        request.files.add(http.MultipartFile.fromBytes('file', bytes, filename: file.name));
+        request.files.add(
+          http.MultipartFile.fromBytes('file', bytes, filename: file.name),
+        );
       } else {
         request.files.add(await http.MultipartFile.fromPath('file', file.path));
       }
@@ -601,9 +642,16 @@ class _AgrobotChatWidgetState extends State<AgrobotChatWidget>
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error al subir: $e'), backgroundColor: Colors.red));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al subir: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
       }
-      setState(() { msg.isUploading = false; });
+      setState(() {
+        msg.isUploading = false;
+      });
     }
   }
 
@@ -634,33 +682,54 @@ class _AgrobotChatWidgetState extends State<AgrobotChatWidget>
         children: [
           _buildHeader(),
           Expanded(
-            child: _mostrandoHistorial ? _buildHistorialView() : _buildChatArea(),
+            child: _mostrandoHistorial
+                ? _buildHistorialView()
+                : _buildChatArea(),
           ),
-          if (!_mostrandoHistorial && _mensajes.length <= 1) _buildSugerencias(),
-          
+          if (!_mostrandoHistorial && _mensajes.length <= 1)
+            _buildSugerencias(),
+
           if (_imagenSeleccionada != null)
             Container(
               alignment: Alignment.centerLeft,
               padding: const EdgeInsets.only(left: 20, top: 10),
               child: Stack(
                 children: [
-                   ClipRRect(
+                  ClipRRect(
                     borderRadius: BorderRadius.circular(12),
-                    child: kIsWeb 
-                      ? Image.network(_imagenSeleccionada!.path, width: 80, height: 80, fit: BoxFit.cover)
-                      : Image.file(File(_imagenSeleccionada!.path), width: 80, height: 80, fit: BoxFit.cover),
+                    child: kIsWeb
+                        ? Image.network(
+                            _imagenSeleccionada!.path,
+                            width: 80,
+                            height: 80,
+                            fit: BoxFit.cover,
+                          )
+                        : Image.file(
+                            File(_imagenSeleccionada!.path),
+                            width: 80,
+                            height: 80,
+                            fit: BoxFit.cover,
+                          ),
                   ),
                   Positioned(
-                    right: 0, top: 0,
+                    right: 0,
+                    top: 0,
                     child: GestureDetector(
                       onTap: () => setState(() => _imagenSeleccionada = null),
                       child: Container(
                         padding: const EdgeInsets.all(4),
-                        decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
-                        child: const Icon(Icons.close, color: Colors.white, size: 14),
+                        decoration: const BoxDecoration(
+                          color: Colors.red,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.close,
+                          color: Colors.white,
+                          size: 14,
+                        ),
                       ),
                     ),
-                  )
+                  ),
                 ],
               ),
             ),
@@ -692,7 +761,9 @@ class _AgrobotChatWidgetState extends State<AgrobotChatWidget>
                   if (_mostrandoHistorial) _cargarHistorial();
                 },
                 icon: Icon(
-                  _mostrandoHistorial ? Icons.chat_bubble_rounded : Icons.history_rounded,
+                  _mostrandoHistorial
+                      ? Icons.chat_bubble_rounded
+                      : Icons.history_rounded,
                   color: Colors.white,
                 ),
               ),
@@ -700,14 +771,35 @@ class _AgrobotChatWidgetState extends State<AgrobotChatWidget>
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(_mostrandoHistorial ? "Tus Conversaciones" : "AgroBot Voice", 
-                    style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                  Text(
+                    _mostrandoHistorial
+                        ? "Tus Conversaciones"
+                        : "AgroBot Voice",
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                   if (!_mostrandoHistorial)
                     Row(
                       children: [
-                        Container(width: 8, height: 8, decoration: const BoxDecoration(color: Colors.greenAccent, shape: BoxShape.circle)),
+                        Container(
+                          width: 8,
+                          height: 8,
+                          decoration: const BoxDecoration(
+                            color: Colors.greenAccent,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
                         const SizedBox(width: 6),
-                        Text("En línea", style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontSize: 12)),
+                        Text(
+                          "En línea",
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.8),
+                            fontSize: 12,
+                          ),
+                        ),
                       ],
                     ),
                 ],
@@ -725,7 +817,10 @@ class _AgrobotChatWidgetState extends State<AgrobotChatWidget>
                     });
                     _crearNuevaSesion();
                   },
-                  icon: const Icon(Icons.add_comment_rounded, color: Colors.white),
+                  icon: const Icon(
+                    Icons.add_comment_rounded,
+                    color: Colors.white,
+                  ),
                   tooltip: "Nueva Sesión",
                 ),
               IconButton(
@@ -754,7 +849,9 @@ class _AgrobotChatWidgetState extends State<AgrobotChatWidget>
                     final String id = sesion['id'] ?? sesion['sesion_id'];
                     final String fecha = sesion['fecha_inicio'] ?? '';
                     final List msgs = sesion['mensajes'] ?? [];
-                    final String ultimoTxt = msgs.isNotEmpty ? msgs.last['content'] : 'Conversación vacía';
+                    final String ultimoTxt = msgs.isNotEmpty
+                        ? msgs.last['content']
+                        : 'Conversación vacía';
                     final bool esActiva = _sessionId == id;
 
                     return Card(
@@ -762,13 +859,23 @@ class _AgrobotChatWidgetState extends State<AgrobotChatWidget>
                       margin: const EdgeInsets.only(bottom: 10),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(15),
-                        side: esActiva ? BorderSide(color: azulClaro, width: 2) : BorderSide.none,
+                        side: esActiva
+                            ? BorderSide(color: azulClaro, width: 2)
+                            : BorderSide.none,
                       ),
                       child: ListTile(
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
                         leading: CircleAvatar(
-                          backgroundColor: esActiva ? azulPrincipal : Colors.grey.shade200,
-                          child: Icon(Icons.chat_outlined, color: esActiva ? Colors.white : Colors.grey),
+                          backgroundColor: esActiva
+                              ? azulPrincipal
+                              : Colors.grey.shade200,
+                          child: Icon(
+                            Icons.chat_outlined,
+                            color: esActiva ? Colors.white : Colors.grey,
+                          ),
                         ),
                         title: Text(
                           "Sesión: ${id.substring(0, 8)}...",
@@ -777,17 +884,32 @@ class _AgrobotChatWidgetState extends State<AgrobotChatWidget>
                         subtitle: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(ultimoTxt, maxLines: 1, overflow: TextOverflow.ellipsis),
+                            Text(
+                              ultimoTxt,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                             const SizedBox(height: 4),
-                            Text(fecha.split('T').first, style: TextStyle(fontSize: 10, color: Colors.grey.shade600)),
+                            Text(
+                              fecha.split('T').first,
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: Colors.grey.shade600,
+                              ),
+                            ),
                           ],
                         ),
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             IconButton(
-                              icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                              onPressed: _estaEliminando ? null : () => _showConfirmDelete(id),
+                              icon: const Icon(
+                                Icons.delete_outline,
+                                color: Colors.redAccent,
+                              ),
+                              onPressed: _estaEliminando
+                                  ? null
+                                  : () => _showConfirmDelete(id),
                             ),
                             const Icon(Icons.chevron_right),
                           ],
@@ -809,9 +931,14 @@ class _AgrobotChatWidgetState extends State<AgrobotChatWidget>
       context: context,
       builder: (context) => AlertDialog(
         title: const Text("Eliminar Sesión"),
-        content: const Text("¿Estás seguro de que deseas eliminar esta conversación?"),
+        content: const Text(
+          "¿Estás seguro de que deseas eliminar esta conversación?",
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancelar")),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Cancelar"),
+          ),
           TextButton(
             onPressed: () {
               Navigator.pop(context);
@@ -839,9 +966,7 @@ class _AgrobotChatWidgetState extends State<AgrobotChatWidget>
             },
           ),
           if (_cargandoHistorial)
-            const Center(
-              child: CircularProgressIndicator(),
-            ),
+            const Center(child: CircularProgressIndicator()),
         ],
       ),
     );
@@ -854,7 +979,9 @@ class _AgrobotChatWidgetState extends State<AgrobotChatWidget>
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.78),
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.of(context).size.width * 0.78,
+        ),
         decoration: BoxDecoration(
           color: esBot ? Colors.white : azulPrincipal,
           borderRadius: BorderRadius.only(
@@ -863,7 +990,13 @@ class _AgrobotChatWidgetState extends State<AgrobotChatWidget>
             bottomLeft: Radius.circular(esBot ? 4 : 18),
             bottomRight: Radius.circular(esBot ? 18 : 4),
           ),
-          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 8, offset: const Offset(0, 2))],
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.06),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -876,44 +1009,71 @@ class _AgrobotChatWidgetState extends State<AgrobotChatWidget>
                   children: [
                     Icon(Icons.smart_toy_rounded, size: 14, color: azulClaro),
                     const SizedBox(width: 4),
-                    Text('AgroBot', style: TextStyle(fontSize: 11, color: azulClaro, fontWeight: FontWeight.w600)),
+                    Text(
+                      'AgroBot',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: azulClaro,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ],
                 ),
               ),
-            if (msg.imagen != null) 
+            if (msg.imagen != null)
               Padding(
                 padding: const EdgeInsets.only(bottom: 8.0),
                 child: ClipRRect(
-                  borderRadius: BorderRadius.circular(10), 
-                  child: kIsWeb 
-                    ? Image.network(msg.imagen!.path)
-                    : Image.file(File(msg.imagen!.path))
+                  borderRadius: BorderRadius.circular(10),
+                  child: kIsWeb
+                      ? Image.network(msg.imagen!.path)
+                      : Image.file(File(msg.imagen!.path)),
                 ),
               ),
             if (msg.texto.isNotEmpty)
-              _buildTextoFormateado(msg.texto, esBot ? Colors.black87 : Colors.white),
-            
+              _buildTextoFormateado(
+                msg.texto,
+                esBot ? Colors.black87 : Colors.white,
+              ),
+
             // --- WIDGET DE ACCIÓN (SUBIDA DE ARCHIVOS) ---
-            if (esBot && msg.action != null && msg.action!['type'] == 'UPLOAD_REQUIRED' && !msg.actionCompleted)
+            if (esBot &&
+                msg.action != null &&
+                msg.action!['type'] == 'UPLOAD_REQUIRED' &&
+                !msg.actionCompleted)
               Padding(
                 padding: const EdgeInsets.only(top: 12),
                 child: SizedBox(
-                   width: double.infinity,
-                   child: ElevatedButton.icon(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
                     style: ElevatedButton.styleFrom(
                       backgroundColor: azulClaro.withValues(alpha: 0.1),
                       foregroundColor: azulPrincipal,
                       elevation: 0,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: azulClaro)),
-                      padding: const EdgeInsets.symmetric(vertical: 12)
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        side: BorderSide(color: azulClaro),
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
                     ),
-                    onPressed: msg.isUploading ? null : () => _subirArchivoPorAccion(msg),
-                    icon: msg.isUploading 
-                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                      : const Icon(Icons.cloud_upload_outlined, size: 20),
+                    onPressed: msg.isUploading
+                        ? null
+                        : () => _subirArchivoPorAccion(msg),
+                    icon: msg.isUploading
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.cloud_upload_outlined, size: 20),
                     label: Text(
-                      msg.isUploading ? "SUBIENDO..." : "SUBIR ${msg.action!['nombre_sugerido'] ?? 'ARCHIVO'}",
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                      msg.isUploading
+                          ? "SUBIENDO..."
+                          : "SUBIR ${msg.action!['nombre_sugerido'] ?? 'ARCHIVO'}",
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
                     ),
                   ),
                 ),
@@ -931,12 +1091,24 @@ class _AgrobotChatWidgetState extends State<AgrobotChatWidget>
     final regExp = RegExp(r'\*\*(.*?)\*\*');
     int lastEnd = 0;
     for (final match in regExp.allMatches(texto)) {
-      if (match.start > lastEnd) spans.add(TextSpan(text: texto.substring(lastEnd, match.start)));
-      spans.add(TextSpan(text: match.group(1), style: const TextStyle(fontWeight: FontWeight.bold)));
+      if (match.start > lastEnd)
+        spans.add(TextSpan(text: texto.substring(lastEnd, match.start)));
+      spans.add(
+        TextSpan(
+          text: match.group(1),
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+      );
       lastEnd = match.end;
     }
-    if (lastEnd < texto.length) spans.add(TextSpan(text: texto.substring(lastEnd)));
-    return RichText(text: TextSpan(style: TextStyle(color: color, fontSize: 14.5, height: 1.4), children: spans.isEmpty ? [TextSpan(text: texto)] : spans));
+    if (lastEnd < texto.length)
+      spans.add(TextSpan(text: texto.substring(lastEnd)));
+    return RichText(
+      text: TextSpan(
+        style: TextStyle(color: color, fontSize: 14.5, height: 1.4),
+        children: spans.isEmpty ? [TextSpan(text: texto)] : spans,
+      ),
+    );
   }
 
   Widget _buildStreamingIndicator(bool sinTexto) {
@@ -951,8 +1123,12 @@ class _AgrobotChatWidgetState extends State<AgrobotChatWidget>
             builder: (context, value, child) {
               return Container(
                 margin: const EdgeInsets.symmetric(horizontal: 2),
-                width: 8, height: 8,
-                decoration: BoxDecoration(color: azulClaro.withValues(alpha: value), shape: BoxShape.circle),
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  color: azulClaro.withValues(alpha: value),
+                  shape: BoxShape.circle,
+                ),
               );
             },
           );
@@ -966,13 +1142,16 @@ class _AgrobotChatWidgetState extends State<AgrobotChatWidget>
       color: fondoGris,
       padding: const EdgeInsets.only(left: 16, right: 16, bottom: 8),
       child: Wrap(
-        spacing: 8, runSpacing: 6,
+        spacing: 8,
+        runSpacing: 6,
         children: _sugerencias.map((s) {
           return ActionChip(
             label: Text(s, style: const TextStyle(fontSize: 12)),
             backgroundColor: Colors.white,
             side: BorderSide(color: azulClaro.withValues(alpha: 0.3)),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
             onPressed: () => _enviarMensaje(s),
           );
         }).toList(),
@@ -982,28 +1161,155 @@ class _AgrobotChatWidgetState extends State<AgrobotChatWidget>
 
   Widget _buildInput() {
     return Container(
-      padding: EdgeInsets.only(left: 10, right: 16, top: 12, bottom: MediaQuery.of(context).viewInsets.bottom + 12),
-      decoration: BoxDecoration(color: Colors.white, boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, -2))]),
-      child: _mostrandoHistorial 
-        ? Center(child: Text("Selecciona una sesión para continuar", style: TextStyle(color: Colors.grey.shade600, fontStyle: FontStyle.italic)))
-        : (_isRecording ? _buildRecordingState() : Row(
-        children: [
-          IconButton(icon: Icon(Icons.attach_file, color: azulPrincipal, size: 26), onPressed: _enviando ? null : _seleccionarImagen),
-          Expanded(child: Container(padding: const EdgeInsets.symmetric(horizontal: 16), decoration: BoxDecoration(color: fondoGris, borderRadius: BorderRadius.circular(25)), child: TextField(controller: _controller, focusNode: _focusNode, onSubmitted: (_) => _enviarMensaje(), textInputAction: TextInputAction.send, decoration: const InputDecoration(hintText: 'Escribe tu mensaje...', border: InputBorder.none, contentPadding: EdgeInsets.symmetric(vertical: 12))))),
-          const SizedBox(width: 8),
-          GestureDetector(onTap: _enviando ? null : _toggleMic, child: Container(width: 44, height: 44, decoration: BoxDecoration(color: Colors.white, border: Border.all(color: azulClaro.withValues(alpha: 0.5)), shape: BoxShape.circle), child: Icon(Icons.mic, color: azulClaro, size: 22))),
-          const SizedBox(width: 8),
-          GestureDetector(onTap: _enviando ? null : () => _enviarMensaje(), child: Container(width: 44, height: 44, decoration: BoxDecoration(gradient: LinearGradient(colors: _enviando ? [Colors.grey.shade400, Colors.grey.shade500] : [azulClaro, azulPrincipal]), shape: BoxShape.circle, boxShadow: _enviando ? [] : [BoxShadow(color: azulPrincipal.withValues(alpha: 0.3), blurRadius: 8, offset: const Offset(0, 3))]), child: const Icon(Icons.send_rounded, color: Colors.white, size: 20))),
+      padding: EdgeInsets.only(
+        left: 10,
+        right: 16,
+        top: 12,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 12,
+      ),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, -2),
+          ),
         ],
-      )),
+      ),
+      child: _mostrandoHistorial
+          ? Center(
+              child: Text(
+                "Selecciona una sesión para continuar",
+                style: TextStyle(
+                  color: Colors.grey.shade600,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            )
+          : (_isRecording
+                ? _buildRecordingState()
+                : Row(
+                    children: [
+                      IconButton(
+                        icon: Icon(
+                          Icons.attach_file,
+                          color: azulPrincipal,
+                          size: 26,
+                        ),
+                        onPressed: _enviando ? null : _seleccionarImagen,
+                      ),
+                      Expanded(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          decoration: BoxDecoration(
+                            color: fondoGris,
+                            borderRadius: BorderRadius.circular(25),
+                          ),
+                          child: TextField(
+                            controller: _controller,
+                            focusNode: _focusNode,
+                            onSubmitted: (_) => _enviarMensaje(),
+                            textInputAction: TextInputAction.send,
+                            decoration: const InputDecoration(
+                              hintText: 'Escribe tu mensaje...',
+                              border: InputBorder.none,
+                              contentPadding: EdgeInsets.symmetric(
+                                vertical: 12,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      GestureDetector(
+                        onTap: _enviando ? null : _toggleMic,
+                        child: Container(
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            border: Border.all(
+                              color: azulClaro.withValues(alpha: 0.5),
+                            ),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(Icons.mic, color: azulClaro, size: 22),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      GestureDetector(
+                        onTap: _enviando ? null : () => _enviarMensaje(),
+                        child: Container(
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: _enviando
+                                  ? [Colors.grey.shade400, Colors.grey.shade500]
+                                  : [azulClaro, azulPrincipal],
+                            ),
+                            shape: BoxShape.circle,
+                            boxShadow: _enviando
+                                ? []
+                                : [
+                                    BoxShadow(
+                                      color: azulPrincipal.withValues(
+                                        alpha: 0.3,
+                                      ),
+                                      blurRadius: 8,
+                                      offset: const Offset(0, 3),
+                                    ),
+                                  ],
+                          ),
+                          child: const Icon(
+                            Icons.send_rounded,
+                            color: Colors.white,
+                            size: 20,
+                          ),
+                        ),
+                      ),
+                    ],
+                  )),
     );
   }
 
   Widget _buildRecordingState() {
-    return Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-        const Text("🔴 Grabando...", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 16)),
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        const Text(
+          "🔴 Grabando...",
+          style: TextStyle(
+            color: Colors.red,
+            fontWeight: FontWeight.bold,
+            fontSize: 16,
+          ),
+        ),
         const SizedBox(width: 20),
-        GestureDetector(onTap: _toggleMic, child: Container(width: 50, height: 50, decoration: BoxDecoration(color: Colors.red, shape: BoxShape.circle, boxShadow: [BoxShadow(color: Colors.red.withValues(alpha: 0.3), blurRadius: 8, offset: const Offset(0, 3))]), child: const Icon(Icons.stop_rounded, color: Colors.white, size: 28))),
+        GestureDetector(
+          onTap: _toggleMic,
+          child: Container(
+            width: 50,
+            height: 50,
+            decoration: BoxDecoration(
+              color: Colors.red,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.red.withValues(alpha: 0.3),
+                  blurRadius: 8,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
+            child: const Icon(
+              Icons.stop_rounded,
+              color: Colors.white,
+              size: 28,
+            ),
+          ),
+        ),
       ],
     );
   }

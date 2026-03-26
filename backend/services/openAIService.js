@@ -117,6 +117,95 @@ const tools = [
                 required: ["tramiteId", "urlImagenChat"]
             }
         }
+    },
+    {
+        type: "function",
+        function: {
+            name: "obtenerUppsUsuario",
+            description: "Obtiene todas las claves UPP registradas del usuario actual desde sus zonas de mapa. DEBES usar esta herramienta SIEMPRE antes de pedirle la UPP al usuario manualmente. Si el usuario tiene una sola UPP, úsala directamente sin preguntar. Si tiene varias, preséntalas para que elija.",
+            parameters: { type: "object", properties: {} }
+        }
+    },
+    // ─── HERRAMIENTAS DE CONSULTA DE COLECCIONES ───
+    {
+        type: "function",
+        function: {
+            name: "consultarGanado",
+            description: "Consulta el listado de ganado registrado del usuario. Puede filtrar por UPP o por arete SINIIGA. Usa esta herramienta cuando el usuario pregunte sobre sus animales, cuántas cabezas tiene, peso, datos de un animal específico, etc.",
+            parameters: {
+                type: "object",
+                properties: {
+                    upp: {
+                        type: "string",
+                        description: "Clave UPP para filtrar el ganado por ubicación. Opcional."
+                    },
+                    arete_siniiga: {
+                        type: "string",
+                        description: "Arete SINIIGA del animal específico que el usuario busca. Opcional."
+                    }
+                },
+                required: []
+            }
+        }
+    },
+    {
+        type: "function",
+        function: {
+            name: "consultarInventario",
+            description: "Consulta el inventario de insumos/alimentos del usuario. Puede filtrar solo los que tienen stock bajo. Usa esta herramienta cuando el usuario pregunte qué insumos tiene, si le falta algo, stock, medicamentos, alimentos, etc.",
+            parameters: {
+                type: "object",
+                properties: {
+                    soloStockBajo: {
+                        type: "boolean",
+                        description: "Si es true, devuelve solo los items cuyo stock está por debajo del mínimo configurado."
+                    }
+                },
+                required: []
+            }
+        }
+    },
+    {
+        type: "function",
+        function: {
+            name: "consultarComprasLotes",
+            description: "Consulta las compras de lotes de ganado realizadas por el usuario. Puede filtrar por la UPP de destino. Usa esta herramienta cuando el usuario pregunte sobre sus compras de ganado, lotes comprados, proveedores, etc.",
+            parameters: {
+                type: "object",
+                properties: {
+                    upp_destino: {
+                        type: "string",
+                        description: "Clave UPP de destino para filtrar compras. Opcional."
+                    },
+                    limite: {
+                        type: "number",
+                        description: "Cantidad máxima de registros a devolver (por defecto 10). Opcional."
+                    }
+                },
+                required: []
+            }
+        }
+    },
+    {
+        type: "function",
+        function: {
+            name: "consultarVentasSalidas",
+            description: "Consulta las ventas y salidas de ganado registradas por el usuario. Puede filtrar por la UPP de origen. Usa esta herramienta cuando el usuario pregunte sobre sus ventas de ganado, montos, clientes, salidas, etc.",
+            parameters: {
+                type: "object",
+                properties: {
+                    upp_origen: {
+                        type: "string",
+                        description: "Clave UPP de origen para filtrar ventas. Opcional."
+                    },
+                    limite: {
+                        type: "number",
+                        description: "Cantidad máxima de registros a devolver (por defecto 10). Opcional."
+                    }
+                },
+                required: []
+            }
+        }
     }
 ];
 
@@ -157,38 +246,54 @@ class OpenAIService {
         return {
             role: "system",
             content: `
-                ## 🐮 ASISTENTE EXPERTO DEL SISTEMA NACIONAL DE IDENTIFICACIÓN GANADERA 🐮
+                ## 🐮 ASISTENTE EXPERTO DEL SISTEMA DE GESTIÓN AGROPECUARIA — AGRO CONTROL PRO 🐮
 
                 ### 👔 PERFIL Y TONO
-                Eres un asistente virtual institucional de la Asociación Ganadera. Tu tono es profesional, servicial, eficiente y experto en la normativa del Padrón Ganadero Nacional (PGN). Tu objetivo es agilizar la burocracia y facilitar la digitalización de documentos.
+                Eres un asistente virtual integral de la plataforma Agro Control Pro. Tu tono es profesional, servicial, eficiente y experto tanto en la normativa del Padrón Ganadero Nacional (PGN) como en la gestión operativa del rancho (ganado, inventario, compras y ventas). Tu objetivo es agilizar la gestión diaria del productor.
 
-                ### 📋 DOMINIO DE CONOCIMIENTO (Basado en PGN/UPP)
+                ### 📋 DOMINIO DE CONOCIMIENTO
                 1. **Unidad de Producción Pecuaria (UPP):** Es la clave fundamental de 12 dígitos para bovinos, ovinos, caprinos, equinos y colmenas.
-                2. **Actualización Obligatoria:** Todas las UPP (aprox. 45,000 en el estado) deben actualizarse por lo menos UNA vez al año.
+                2. **Actualización Obligatoria:** Todas las UPP deben actualizarse por lo menos UNA vez al año.
                 3. **Trámites Disponibles:**
                     - **PRUEBAS_GANADO:** Gestión de estatus sanitario y resultados de laboratorio.
                     - **MOVILIZACION:** Permisos de traslado (requieren UPP vigente y estatus sanitario aprobado).
-                    - **EXPORTACION:** Trámite de alta prioridad que cumple con el Programa General de Normalización (PGN).
+                    - **EXPORTACION:** Trámite de alta prioridad que cumple con el PGN.
+                4. **Ganado:** Registro individual de animales con arete SINIIGA, UPP, peso, temperatura y aptitud de exportación.
+                5. **Inventario:** Control de insumos, medicamentos y alimentos con alertas de stock bajo.
+                6. **Compras de Lotes:** Registro de embarques de ganado comprado (proveedor, UPP destino, cabezas, peso, precio/kg).
+                7. **Ventas / Salidas:** Registro de ventas de ganado (cliente, UPP origen, cabezas, peso, precio/kg, monto total).
 
                 ### 🛠️ CAPACIDADES TECNOLÓGICAS (Functions)
                 Tienes acceso a herramientas para:
                 - Consultar estatus sanitario de una UPP.
-                - Verificar el progreso de trámites en tiempo real (etapas como Solicitud, Revisión, Inspección, Finalizado).
-                - Crear nuevos folios de trámite directamente en la base de datos de Firebase.
-                - **Consultar el estado de un trámite proporcionando UPP, nombre/tipo de trámite o ID.**
+                - Verificar el progreso de trámites en tiempo real.
+                - Crear nuevos folios de trámite.
+                - Consultar el estado de un trámite por UPP, tipo o ID.
+                - **Consultar el ganado registrado** del usuario (por UPP o arete).
+                - **Consultar el inventario** de insumos (incluyendo alertas de stock bajo).
+                - **Consultar compras de lotes** de ganado realizadas.
+                - **Consultar ventas y salidas** de ganado registradas.
+
+                ### 🔑 AUTO-DETECCIÓN DE UPP (CRÍTICO)
+                - **SIEMPRE** que necesites la UPP del usuario (para crear trámites, consultar estatus sanitario, buscar trámites por filtros, etc.), primero ejecuta la herramienta \`obtenerUppsUsuario\` para obtener sus UPPs registradas.
+                - Si el usuario tiene **una sola UPP**, úsala automáticamente sin preguntar.
+                - Si tiene **múltiples UPPs**, preséntale la lista y pregunta cuál usar para esta operación.
+                - **NUNCA** pidas al usuario que escriba su clave UPP manualmente si puedes obtenerla con la herramienta.
+                - Si no tiene ninguna UPP registrada, indícale que primero debe registrar una zona en la sección de Mapa de la aplicación.
 
                 ### 🛑 REGLAS CRÍTICAS DE OPERACIÓN
-                1. **Foco Exclusivo:** Si el usuario pregunta sobre temas ajenos (política, clima, ventas generales, inventario de alimentos), responde: "Mi especialidad se limita a la gestión de trámites de Sanidad, Movilización y Exportación de la Asociación Ganadera. ¿Cómo puedo ayudarte con tu UPP?".
-                2. **Manejo de Etapas:** Explica siempre en qué etapa se encuentra un trámite para reducir la ansiedad del productor. Usa nombres de etapas claros (ej: "Muestras en Laboratorio").
-                3. **Carga de Documentos (CRÍTICO):** Ante cualquier mención de "adjuntar", "subir", "enviar foto/pdf" o "poner documento", DEBES llamar a 'solicitarCargaDocumento'. No expliques cómo hacerlo, ACTIVA la herramienta directamente para que aparezca el botón en su pantalla.
-                4. **Consultas Rápidas:** (MODO DESARROLLO) Si el usuario provee el ID del trámite, procede a usar la herramienta directamente sin pedirle la UPP.
+                1. **Foco Agropecuario:** Si el usuario pregunta sobre temas completamente ajenos al sector agropecuario (política, deportes, entretenimiento), responde amablemente que tu especialidad es la gestión agropecuaria y ofrece ayuda en tus áreas de conocimiento.
+                2. **Manejo de Etapas:** Explica siempre en qué etapa se encuentra un trámite para reducir la ansiedad del productor.
+                3. **Carga de Documentos (CRÍTICO):** Ante cualquier mención de "adjuntar", "subir", "enviar foto/pdf" o "poner documento", DEBES llamar a 'solicitarCargaDocumento'. ACTIVA la herramienta directamente.
+                4. **Consultas Rápidas:** Si el usuario provee un ID directo, procede a usar la herramienta sin pedir más datos.
+                5. **Resumen de datos grandes:** Si una consulta devuelve muchos registros, presenta un resumen con el total y los datos más relevantes (ej: "Tienes 45 cabezas registradas. Aquí están los primeros 10...").
 
                 ### ⚠️ MANEJO DE ERRORES
-                - Si una función devuelve un error (ej: Trámite no encontrado), no inventes datos. Informa al usuario que no se encontró el registro y sugiere verificar el número de folio o la clave UPP.
+                - Si una función devuelve un error, no inventes datos. Informa al usuario y sugiere verificar los datos proporcionados.
                 - Si el usuario proporciona una clave UPP de menos o más de 12 dígitos, indícale que debe ser exactamente de 12 dígitos.
 
                 ### 🎯 OBJETIVO FINAL
-                Transformar la experiencia del productor de un proceso lento y físico a uno digital, transparente y rápido, asegurando que el personal de la asociación reciba expedientes ya validados y completos.
+                Ser el copiloto digital del productor: desde consultar cuántas cabezas tiene, verificar si le falta alimento, revisar sus ventas del mes, hasta gestionar trámites oficiales. Todo desde el chat.
             `
         };
     }
@@ -423,6 +528,103 @@ class OpenAIService {
                         message: "El archivo ha sido vinculado exitosamente al trámite y ya es visible en la Ventanilla Digital.",
                         documento: resAdjunto
                     };
+
+                case "obtenerUppsUsuario":
+                    // Consultamos las zonas del mapa del usuario para extraer sus UPPs
+                    const zonasSnapshot = await db.collection('zonas_mapa')
+                        .where('usuario_id', '==', usuario_id)
+                        .get();
+                    const uppsUnicas = [...new Set(
+                        zonasSnapshot.docs.map(d => d.data().upp).filter(Boolean)
+                    )];
+                    return {
+                        upps: uppsUnicas,
+                        total: uppsUnicas.length,
+                        message: uppsUnicas.length === 0
+                            ? "El usuario no tiene UPPs registradas. Debe registrar una zona en el Mapa primero."
+                            : `El usuario tiene ${uppsUnicas.length} UPP(s) registrada(s).`
+                    };
+
+                // ─── HANDLERS DE CONSULTA DE COLECCIONES ───
+                case "consultarGanado": {
+                    let query = db.collection('ganado').where('usuario_id', '==', usuario_id);
+                    if (args.upp) query = query.where('upp', '==', args.upp);
+                    if (args.arete_siniiga) query = query.where('arete_siniiga', '==', args.arete_siniiga);
+
+                    const snapGanado = await query.get();
+                    const ganado = snapGanado.docs.map(d => ({ id: d.id, ...d.data() }));
+
+                    return {
+                        total: ganado.length,
+                        registros: ganado.slice(0, 20),
+                        mensaje: ganado.length > 20 ? `Mostrando 20 de ${ganado.length} registros.` : undefined
+                    };
+                }
+
+                case "consultarInventario": {
+                    const snapInv = await db.collection('inventario')
+                        .where('usuario_id', '==', usuario_id)
+                        .get();
+                    let items = snapInv.docs.map(d => ({ id: d.id, ...d.data() }));
+
+                    if (args.soloStockBajo) {
+                        items = items.filter(item => {
+                            const actual = Number(item.cantidad) || 0;
+                            const minimo = Number(item.stockMinimo) || 10;
+                            return actual <= minimo;
+                        });
+                    }
+
+                    return {
+                        total: items.length,
+                        registros: items.slice(0, 20),
+                        mensaje: items.length > 20 ? `Mostrando 20 de ${items.length} items.` : undefined
+                    };
+                }
+
+                case "consultarComprasLotes": {
+                    const limCompras = args.limite || 10;
+                    let qCompras = db.collection('compras_lotes').where('usuario_id', '==', usuario_id);
+                    if (args.upp_destino) qCompras = qCompras.where('upp_destino', '==', args.upp_destino);
+
+                    const snapCompras = await qCompras.limit(limCompras).get();
+                    const compras = snapCompras.docs.map(d => ({ id: d.id, ...d.data() }));
+
+                    // Calcular totales
+                    let totalCabezas = 0, totalPagado = 0;
+                    compras.forEach(c => {
+                        totalCabezas += Number(c.cantidad_cabezas) || 0;
+                        totalPagado += Number(c.total_pagado) || 0;
+                    });
+
+                    return {
+                        total_registros: compras.length,
+                        resumen: { totalCabezas, totalPagado: totalPagado.toFixed(2) },
+                        registros: compras
+                    };
+                }
+
+                case "consultarVentasSalidas": {
+                    const limVentas = args.limite || 10;
+                    let qVentas = db.collection('ventas_salidas').where('usuario_id', '==', usuario_id);
+                    if (args.upp_origen) qVentas = qVentas.where('upp_origen', '==', args.upp_origen);
+
+                    const snapVentas = await qVentas.limit(limVentas).get();
+                    const ventas = snapVentas.docs.map(d => ({ id: d.id, ...d.data() }));
+
+                    // Calcular totales
+                    let totalCabezasV = 0, totalMontoV = 0;
+                    ventas.forEach(v => {
+                        totalCabezasV += Number(v.cantidad_cabezas) || 0;
+                        totalMontoV += Number(v.monto_total) || 0;
+                    });
+
+                    return {
+                        total_registros: ventas.length,
+                        resumen: { totalCabezas: totalCabezasV, totalMonto: totalMontoV.toFixed(2) },
+                        registros: ventas
+                    };
+                }
 
                 default:
                     return { error: "Función no implementada" };

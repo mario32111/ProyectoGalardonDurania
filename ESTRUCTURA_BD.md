@@ -45,7 +45,35 @@ Gestión de trámites en el sistema. Soporta tres flujos que avanzan de etapa en
 - `historial` (Array of Objects) - Registro de auditoría/cambios de etapa o estado
 - `observaciones_list` (Array of Objects) - Bitácora de observaciones por paso o usuario
 
-### 5. `sesiones` (Chatbot Asistente)
+### 5. `compras_lotes`
+Registro de compras de lotes/embarques de ganado.
+- `id` (Document ID)
+- `usuario_id` (String) - UID del usuario que registra la compra
+- `upp_destino` (String) - Clave UPP de destino
+- `proveedor` (String)
+- `origen` (String) - Lugar de origen del ganado
+- `fecha_indicada` (String) - Fecha de compra indicada por el usuario
+- `cantidad_cabezas` (Number)
+- `peso_total_kg` (Number)
+- `precio_por_kilo` (Number)
+- `total_pagado` (Number) - peso_total_kg × precio_por_kilo
+- `fecha_registro_sistema` (Timestamp)
+
+### 6. `ventas_salidas`
+Registro de ventas y salidas de ganado.
+- `id` (Document ID)
+- `usuario_id` (String) - UID del usuario que registra la venta
+- `upp_origen` (String) - Clave UPP de origen
+- `cliente` (String) - Nombre del comprador
+- `destino` (String) - Destino del ganado (Rastro/Engorda)
+- `fecha_salida` (String) - Fecha de salida indicada
+- `cantidad_cabezas` (Number)
+- `peso_total_kg` (Number)
+- `precio_venta_kg` (Number)
+- `monto_total` (Number) - peso_total_kg × precio_venta_kg
+- `fecha_registro_sistema` (Timestamp)
+
+### 7. `sesiones` (Chatbot Asistente)
 Historial y contexto de las conversaciones del asistente inteligente de IA.
 - `id` / `sesion_id` (Document ID)
 - `usuario_id` (String)

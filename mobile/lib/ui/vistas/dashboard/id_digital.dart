@@ -12,8 +12,8 @@ class VistaIdDigital extends StatefulWidget {
 }
 
 class _VistaIdDigitalState extends State<VistaIdDigital> {
-  static const String _serverUrl = 'http://192.168.1.72:3000';
-  
+  static const String _serverUrl = 'http://192.168.15.84:3000';
+
   bool _isLoading = true;
   List<dynamic> _credentials = [];
   String? _error;
@@ -33,13 +33,11 @@ class _VistaIdDigitalState extends State<VistaIdDigital> {
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) throw Exception("Usuario no autenticado");
-      
+
       final token = await user.getIdToken();
       final response = await http.get(
         Uri.parse('$_serverUrl/wallet/api/list'),
-        headers: {
-          'Authorization': 'Bearer $token',
-        },
+        headers: {'Authorization': 'Bearer $token'},
       );
 
       if (response.statusCode == 200) {
@@ -63,19 +61,17 @@ class _VistaIdDigitalState extends State<VistaIdDigital> {
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) return;
-      
+
       final token = await user.getIdToken();
       final response = await http.get(
         Uri.parse('$_serverUrl/wallet/api/save-link/$credentialId'),
-        headers: {
-          'Authorization': 'Bearer $token',
-        },
+        headers: {'Authorization': 'Bearer $token'},
       );
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         final String url = data['url'];
-        
+
         if (await canLaunchUrl(Uri.parse(url))) {
           await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
         } else {
@@ -98,50 +94,69 @@ class _VistaIdDigitalState extends State<VistaIdDigital> {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
       appBar: AppBar(
-        title: const Text("ID Digital Ganadera", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+        title: const Text(
+          "ID Digital Ganadera",
+          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+        ),
         backgroundColor: azulAgro,
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
       ),
-      body: _isLoading 
-        ? const Center(child: CircularProgressIndicator())
-        : _error != null
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _error != null
           ? Center(
               child: Padding(
                 padding: const EdgeInsets.all(20.0),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.error_outline, size: 60, color: Colors.red),
+                    const Icon(
+                      Icons.error_outline,
+                      size: 60,
+                      color: Colors.red,
+                    ),
                     const SizedBox(height: 10),
-                    Text("Error al cargar IDs: $_error", textAlign: TextAlign.center),
+                    Text(
+                      "Error al cargar IDs: $_error",
+                      textAlign: TextAlign.center,
+                    ),
                     const SizedBox(height: 20),
-                    ElevatedButton(onPressed: _fetchCredentials, child: const Text("Reintentar")),
+                    ElevatedButton(
+                      onPressed: _fetchCredentials,
+                      child: const Text("Reintentar"),
+                    ),
                   ],
                 ),
               ),
             )
           : _credentials.isEmpty
-            ? Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.badge_outlined, size: 80, color: Colors.grey[300]),
-                    const SizedBox(height: 20),
-                    const Text("No tienes IDs digitales aún", style: TextStyle(fontSize: 18, color: Colors.grey)),
-                    const SizedBox(height: 10),
-                    const Text("Crea uno desde el panel administrativo", style: TextStyle(color: Colors.grey)),
-                  ],
-                ),
-              )
-            : ListView.builder(
-                padding: const EdgeInsets.all(20),
-                itemCount: _credentials.length,
-                itemBuilder: (context, index) {
-                  final cred = _credentials[index];
-                  return _buildCredentialCard(cred);
-                },
+          ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.badge_outlined, size: 80, color: Colors.grey[300]),
+                  const SizedBox(height: 20),
+                  const Text(
+                    "No tienes IDs digitales aún",
+                    style: TextStyle(fontSize: 18, color: Colors.grey),
+                  ),
+                  const SizedBox(height: 10),
+                  const Text(
+                    "Crea uno desde el panel administrativo",
+                    style: TextStyle(color: Colors.grey),
+                  ),
+                ],
               ),
+            )
+          : ListView.builder(
+              padding: const EdgeInsets.all(20),
+              itemCount: _credentials.length,
+              itemBuilder: (context, index) {
+                final cred = _credentials[index];
+                return _buildCredentialCard(cred);
+              },
+            ),
     );
   }
 
@@ -165,7 +180,7 @@ class _VistaIdDigitalState extends State<VistaIdDigital> {
                   color: Colors.black.withOpacity(0.2),
                   blurRadius: 15,
                   offset: const Offset(0, 8),
-                )
+                ),
               ],
             ),
             child: Column(
@@ -183,7 +198,10 @@ class _VistaIdDigitalState extends State<VistaIdDigital> {
                           color: Colors.white24,
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: const Icon(Icons.agriculture, color: Colors.white),
+                        child: const Icon(
+                          Icons.agriculture,
+                          color: Colors.white,
+                        ),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
@@ -192,11 +210,18 @@ class _VistaIdDigitalState extends State<VistaIdDigital> {
                           children: [
                             Text(
                               cred['cardTitle'] ?? "ID Ganadero",
-                              style: const TextStyle(color: Colors.white70, fontSize: 12),
+                              style: const TextStyle(
+                                color: Colors.white70,
+                                fontSize: 12,
+                              ),
                             ),
                             Text(
                               cred['headerName'] ?? "NOMBRE",
-                              style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           ],
                         ),
@@ -204,7 +229,7 @@ class _VistaIdDigitalState extends State<VistaIdDigital> {
                     ],
                   ),
                 ),
-                
+
                 // Imagen central / Hero
                 if (cred['logoUrl'] != null)
                   Container(
@@ -214,7 +239,8 @@ class _VistaIdDigitalState extends State<VistaIdDigital> {
                     child: Image.network(
                       cred['logoUrl'],
                       fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => Container(color: Colors.white10),
+                      errorBuilder: (_, __, ___) =>
+                          Container(color: Colors.white10),
                     ),
                   ),
 
@@ -227,8 +253,20 @@ class _VistaIdDigitalState extends State<VistaIdDigital> {
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text("CLAVE UPP", style: TextStyle(color: Colors.white70, fontSize: 10)),
-                          Text(cred['barcodeValue'] ?? "Cargando...", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                          const Text(
+                            "CLAVE UPP",
+                            style: TextStyle(
+                              color: Colors.white70,
+                              fontSize: 10,
+                            ),
+                          ),
+                          Text(
+                            cred['barcodeValue'] ?? "Cargando...",
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                         ],
                       ),
                       Container(
@@ -237,15 +275,19 @@ class _VistaIdDigitalState extends State<VistaIdDigital> {
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: const Icon(Icons.qr_code, size: 40, color: Colors.black87),
-                      )
+                        child: const Icon(
+                          Icons.qr_code,
+                          size: 40,
+                          color: Colors.black87,
+                        ),
+                      ),
                     ],
                   ),
                 ),
               ],
             ),
           ),
-          
+
           const SizedBox(height: 20),
 
           // BOTON DE GOOGLE WALLET
@@ -264,23 +306,28 @@ class _VistaIdDigitalState extends State<VistaIdDigital> {
                   Image.network(
                     'https://upload.wikimedia.org/wikipedia/commons/f/f2/Google_Wallet_logo_2022.svg',
                     height: 20,
-                    errorBuilder: (_, __, ___) => const Icon(Icons.wallet, color: Colors.white, size: 20),
+                    errorBuilder: (_, __, ___) =>
+                        const Icon(Icons.wallet, color: Colors.white, size: 20),
                   ),
                   const SizedBox(width: 10),
                   const Text(
                     "Agregar a Google Wallet",
-                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
                   ),
                 ],
               ),
             ),
           ),
-          
+
           const SizedBox(height: 10),
           const Text(
             "Disponible para Android",
             style: TextStyle(fontSize: 10, color: Colors.grey),
-          )
+          ),
         ],
       ),
     );
