@@ -71,6 +71,7 @@ pids/
 # BACKEND — Credenciales y archivos sensibles
 # =============================================
 backend/firebase-service-account.json
+backend/google-wallet-credentials.json
 backend/uploads/*
 !backend/uploads/.gitkeep
 uploads/

@@ -2,6 +2,7 @@ const { createAzureClient } = require('../config/azureConfig.js');
 const { db, admin } = require('../config/firebaseConfig.js');
 
 const tramitesService = require('./tramitesService.js');
+const { uploadFile } = require('./firebaseStorageService.js');
 const chatbotService = require('./chatbotService.js'); // Import chatbotService
 
 const tools = [
@@ -85,6 +86,37 @@ const tools = [
                 required: ["uppId"]
             }
         }
+    },
+    {
+        type: "function",
+        function: {
+            name: "solicitarCargaDocumento",
+            description: "Activa el selector de archivos en la App del usuario para subir un documento (PDF o Foto). ÚSALO SIEMPRE que el usuario mencione 'adjuntar', 'subir', 'enviar archivo/foto', o cuando el trámite esté en etapa de 'Revisión Documental'.",
+            parameters: {
+                type: "object",
+                properties: {
+                    tramiteId: { type: "string", description: "ID del trámite (Folio)" },
+                    nombreDocumento: { type: "string", description: "Nombre sugerido del documento (Ej: Constancia Sanitaria)" }
+                },
+                required: ["tramiteId"]
+            }
+        }
+    },
+    {
+        type: "function",
+        function: {
+            name: "vincularDocumentoChat",
+            description: "Vincula oficialmente una imagen que el usuario acabó de enviar por el chat (identificada por el Sistema mediante una URL) al expediente de un trámite específico.",
+            parameters: {
+                type: "object",
+                properties: {
+                    tramiteId: { type: "string", description: "ID del trámite (Folio)" },
+                    nombreDocumento: { type: "string", description: "Nombre del documento (Ej: Constancia Sanitaria)" },
+                    urlImagenChat: { type: "string", description: "La URL exacta que el Sistema te proporcionó en el mensaje contextual [SISTEMA: URL: ...]. NO inventes esta URL." }
+                },
+                required: ["tramiteId", "urlImagenChat"]
+            }
+        }
     }
 ];
 
@@ -148,7 +180,7 @@ class OpenAIService {
                 ### 🛑 REGLAS CRÍTICAS DE OPERACIÓN
                 1. **Foco Exclusivo:** Si el usuario pregunta sobre temas ajenos (política, clima, ventas generales, inventario de alimentos), responde: "Mi especialidad se limita a la gestión de trámites de Sanidad, Movilización y Exportación de la Asociación Ganadera. ¿Cómo puedo ayudarte con tu UPP?".
                 2. **Manejo de Etapas:** Explica siempre en qué etapa se encuentra un trámite para reducir la ansiedad del productor. Usa nombres de etapas claros (ej: "Muestras en Laboratorio").
-                3. **Impulso a la Digitalización:** Ante cualquier solicitud de requisitos, menciona: "Recuerde que puede subir sus documentos digitalmente para agilizar el proceso y ayudarnos a reducir el uso de archivos físicos y papelería".
+                3. **Carga de Documentos (CRÍTICO):** Ante cualquier mención de "adjuntar", "subir", "enviar foto/pdf" o "poner documento", DEBES llamar a 'solicitarCargaDocumento'. No expliques cómo hacerlo, ACTIVA la herramienta directamente para que aparezca el botón en su pantalla.
                 4. **Consultas Rápidas:** (MODO DESARROLLO) Si el usuario provee el ID del trámite, procede a usar la herramienta directamente sin pedirle la UPP.
 
                 ### ⚠️ MANEJO DE ERRORES
@@ -161,7 +193,7 @@ class OpenAIService {
         };
     }
 
-    async completion(sesion_id, userMessageContent, ws, usuario_id) {
+    async completion(sesion_id, userMessageContent, ws, usuario_id, imageBase64) {
         // Obtenemos historial DB (async)
         // Usar try/catch para manejar errores de DB
         let history;
@@ -174,7 +206,27 @@ class OpenAIService {
 
         // Evitamos duplicar el mensaje si es una re-entrada por función
         if (userMessageContent !== "_FUNCTION_RESULT_") {
-            const userMsg = { role: 'user', content: userMessageContent };
+            let finalContent = userMessageContent;
+            
+            // Si hay una imagen, la subimos a Storage para tener una URL real
+            if (imageBase64) {
+                try {
+                    const buffer = Buffer.from(imageBase64, 'base64');
+                    const fileName = `chat_attachment_${Date.now()}.jpg`;
+                    const fileUrl = await uploadFile({
+                        buffer,
+                        originalname: fileName,
+                        mimetype: 'image/jpeg'
+                    }, 'chat_attachments');
+                    
+                    finalContent += `\n\n[SISTEMA: El usuario ha adjuntado una imagen real. URL: ${fileUrl}]`;
+                } catch (err) {
+                    console.error("Error subiendo adjunto de chat:", err);
+                    finalContent += "\n\n[SISTEMA: El usuario intentó adjuntar una imagen pero hubo un error en la carga]";
+                }
+            }
+
+            const userMsg = { role: 'user', content: finalContent };
             history.push(userMsg);
 
             if (sesion_id) {
@@ -265,7 +317,7 @@ class OpenAIService {
                     this.emitEvent(ws, 'ai_log', { message: `Consultando base de datos: ${functionName}` });
 
                     // LLAMADA AL DESPACHADOR CONECTADO AL SERVICIO REAL
-                    const result = await this.handleFunctionCall(functionName, args, usuario_id);
+                    const result = await this.handleFunctionCall(functionName, args, usuario_id, ws);
 
                     const toolMsg = {
                         role: "tool",
@@ -291,7 +343,7 @@ class OpenAIService {
         }
     }
 
-    async handleFunctionCall(name, args, usuario_id) {
+    async handleFunctionCall(name, args, usuario_id, ws) {
         console.log("Llamando a: ", name);
         console.log("Con argumentos: ", args);
         try {
@@ -327,11 +379,49 @@ class OpenAIService {
                         tipo: 'PRUEBAS_GANADO',
                         estado: 'COMPLETADO'
                         // Podrías filtrar por uppId si tuvieras ese campo en la base
-                    });
+                    }, usuario_id);
                     return {
                         upp: args.uppId,
                         vigente: pruebas.length > 0,
                         total_pruebas: pruebas.length
+                    };
+                
+                case "solicitarCargaDocumento":
+                    // 1. Verificar si el trámite existe y está en la etapa correcta
+                    const tramiteDocs = await tramitesService.getById(args.tramiteId, usuario_id);
+                    if (!tramiteDocs) return { error: "Trámite no encontrado" };
+
+                    // Etapas de revisión documental (usualmente etapa 2)
+                    if (tramiteDocs.etapa_actual !== 2) {
+                        return { 
+                            error: `No es posible subir documentos ahora. El trámite está en la etapa ${tramiteDocs.etapa_actual}. La carga solo se permite en la etapa 2 (Revisión Documental).` 
+                        };
+                    }
+
+                    // 2. Emitir comando especial a la App mediante WS
+                    this.emitEvent(ws, 'ai_action', { 
+                        type: 'UPLOAD_REQUIRED', 
+                        tramite_id: args.tramiteId,
+                        nombre_sugerido: args.nombreDocumento || "Documento"
+                    });
+
+                    return { 
+                        success: true, 
+                        message: "Se ha solicitado al usuario que suba el archivo mediante el widget interactivo que acaba de aparecer en su pantalla." 
+                    };
+
+                case "vincularDocumentoChat":
+                    // Vinculamos la imagen que el bot detectó en el historial
+                    const resAdjunto = await tramitesService.adjuntarDocumento(args.tramiteId, {
+                        url: args.urlImagenChat,
+                        nombre: args.nombreDocumento || "Imagen de Chat",
+                        responsable: "AgroBot (Asistente IA)"
+                    }, usuario_id);
+
+                    return { 
+                        success: true, 
+                        message: "El archivo ha sido vinculado exitosamente al trámite y ya es visible en la Ventanilla Digital.",
+                        documento: resAdjunto
                     };
 
                 default:

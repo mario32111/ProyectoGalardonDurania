@@ -1,3 +1,4 @@
+require('dotenv').config();
 var createError = require('http-errors');
 var express = require('express');
 var path = require('path');
@@ -14,6 +15,7 @@ var inventarioRouter = require('./routes/inventario');
 var chatbotRouter = require('./routes/chatbot');
 var tramitesRouter = require('./routes/tramites');
 var uploadRouter = require('./routes/upload');
+const walletRouter = require('./routes/wallet');
 
 var app = express();
 
@@ -23,8 +25,8 @@ app.set('view engine', 'jade');
 
 app.use(cors());
 app.use(logger('dev'));
-app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: false }));
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -43,6 +45,7 @@ app.use('/inventario', verifyToken);
 app.use('/chatbot', verifyToken);
 app.use('/tramites', verifyToken);
 app.use('/upload', verifyToken);
+// app.use('/wallet', verifyToken); // Removido para acceso directo via navegador similar al microservicio original
 
 app.use('/', indexRouter);
 app.use('/users', usersRouter);
@@ -52,6 +55,7 @@ app.use('/inventario', inventarioRouter);
 app.use('/chatbot', chatbotRouter);
 app.use('/tramites', tramitesRouter);
 app.use('/upload', uploadRouter);
+app.use('/wallet', walletRouter);
 
 // catch 404 and forward to error handler
 app.use(function (req, res, next) {

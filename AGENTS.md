@@ -11,7 +11,6 @@
 | Backend (API) | `backend/` | Node.js · Express · CommonJS | `3000` |
 | Mobile | `mobile/` | Flutter / Dart (SDK ≥ 3.9.2) | N/A |
 | IAService | `IAService/` | Python · FastAPI · Faster-Whisper | `8000` |
-| Identification | `identification/` | Node.js · Express | `3000` |
 
 ## Arquitectura de Servicios
 
@@ -23,16 +22,16 @@ Mobile (Flutter) ──REST / WebSocket──▶ Backend (Express)
                      Firebase        Azure OpenAI    Groq / IAService
                   (Firestore +       (GPT-3.5         (Speech-to-
                     Storage)          Turbo)             Text)
-                                                          │
-                                               Identification
-                                              (Google Wallet)
+                                           │
+                                       Google Wallet
+                                      (Identification)
 ```
 
 - **Mobile → Backend**: REST + WebSocket (streaming del chatbot).
 - **Backend → Firebase**: CRUD Firestore + carga/descarga Firebase Storage.
 - **Backend → Azure OpenAI**: Chatbot con tool-calling y streaming.
 - **Backend → Groq / IAService**: Transcripción de audio (doble vía).
-- **Identification**: Microservicio independiente para credenciales Google Wallet.
+- **Backend (Wallet)**: Gestión de credenciales Google Wallet integrado.
 
 ## Estructura del Monorepo
 
@@ -52,11 +51,12 @@ Mobile (Flutter) ──REST / WebSocket──▶ Backend (Express)
 │   │   └── azureConfig.js          # Azure OpenAI (⚠️ ESM: import/export)
 │   ├── routes/                     # Controladores HTTP
 │   │   ├── ganado.js, usuarios.js, inventario.js
-│   │   ├── tramites.js, chatbot.js, upload.js
+│   │   ├── tramites.js, chatbot.js, upload.js, wallet.js
 │   │   └── users.js (legacy)
 │   ├── services/                   # Lógica de negocio
 │   │   ├── openAIService.js        # ⚠️ Archivo crítico (~15KB) — Agente IA
 │   │   ├── chatbotService.js       # Sesiones de chat en Firestore
+│   │   ├── walletService.js        # Google Wallet API Integration
 │   │   ├── ganadoService.js, inventarioService.js, usuariosService.js
 │   │   ├── tramitesService.js      # Flujos de trámites multi-etapa
 │   │   ├── firebaseStorageService.js
@@ -85,18 +85,13 @@ Mobile (Flutter) ──REST / WebSocket──▶ Backend (Express)
 │   ├── AGENTS.md                   # Reglas específicas del IAService
 │   ├── main.py                     # FastAPI — POST /trans
 │   └── models_whisper/             # Modelos Whisper descargados
-│
-└── identification/                 # Google Wallet
-    ├── AGENTS.md                   # Reglas específicas
-    ├── index.js                    # Express app con UI inline
-    └── services/googleWallet.js    # Google Wallet API
 ```
 
 ## Reglas Globales (aplican a TODO el proyecto)
 
 ### Antes de cualquier cambio
 
-1. **Identifica el módulo correcto**: ¿El cambio va en `backend/`, `mobile/`, `IAService/` o `identification/`? Lee el `AGENTS.md` del módulo correspondiente.
+1. **Identifica el módulo correcto**: ¿El cambio va en `backend/`, `mobile/` o `IAService/`? Lee el `AGENTS.md` del módulo correspondiente.
 2. **Si involucra datos de Firestore**: Lee `ESTRUCTURA_BD.md` antes de escribir código.
 3. **NUNCA modifiques** `firebase-service-account.json` ni archivos `.env` con credenciales reales.
 4. **NUNCA expongas** secretos, API keys o credenciales en respuestas, logs o código nuevo.

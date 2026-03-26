@@ -1,10 +1,17 @@
 const { GoogleAuth } = require('google-auth-library');
+const path = require('path');
 
 class GoogleWalletService {
   constructor() {
     this.credentialsPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+    
+    // Resolve path if it's not absolute
+    const fullPath = path.isAbsolute(this.credentialsPath) 
+      ? this.credentialsPath 
+      : path.join(__dirname, '../', this.credentialsPath);
+
     this.auth = new GoogleAuth({
-      keyFile: this.credentialsPath,
+      keyFile: fullPath,
       scopes: ['https://www.googleapis.com/auth/wallet_object.issuer']
     });
   }

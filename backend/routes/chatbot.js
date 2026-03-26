@@ -48,7 +48,7 @@ const upload = multer({
 // POST /chatbot/message - Enviar un mensaje al chatbot (SSE streaming)
 router.post('/message', async function (req, res, next) {
   try {
-    const { message, session_id } = req.body;
+    const { message, session_id, image_base64 } = req.body;
     const usuario_id = req.user.uid; // Obtenido del token
 
     console.log(`Mensaje de ${usuario_id}:`, message);
@@ -83,7 +83,7 @@ router.post('/message', async function (req, res, next) {
 
     // Llamamos al servicio — los chunks se envían en tiempo real
     // PASAMOS usuario_id para asegurar asociación en openAIService
-    await openAIService.completion(session_id, message, sseAdapter, usuario_id);
+    await openAIService.completion(session_id, message, sseAdapter, usuario_id, image_base64);
 
     // Señal de fin de stream
     res.write(`data: [DONE]\n\n`);

@@ -217,6 +217,26 @@ class TramitesService {
         });
         return stats;
     }
+
+    async adjuntarDocumento(id, { url, nombre, responsable }, usuario_id) {
+        const doc = await this.getById(id, usuario_id);
+        if (!doc) throw new Error('Trámite no encontrado o no autorizado');
+
+        const nuevoDoc = {
+            url,
+            nombre: nombre || 'Documento adjunto',
+            fecha: new Date().toISOString(),
+            responsable: responsable || 'Usuario'
+        };
+
+        // Actualizamos el trámite añadiendo el documento a la lista
+        await db.collection('tramites').doc(id).update({
+            documentos: admin.firestore.FieldValue.arrayUnion(nuevoDoc),
+            ultima_actualizacion: new Date().toISOString()
+        });
+
+        return nuevoDoc;
+    }
 }
 
 module.exports = new TramitesService();

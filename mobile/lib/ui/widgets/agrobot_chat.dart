@@ -19,6 +19,9 @@ class ChatMessage {
   bool isStreaming; // true mientras se reciben chunks
   XFile? imagen; // USAR XFILE PARA COMPATIBILIDAD WEB
   bool isAudio; 
+  Map<String, dynamic>? action; // <--- NUEVO: Para acciones como UPLOAD_REQUIRED
+  bool isUploading; // <--- NUEVO: Estado de carga del archivo vinculado
+  bool actionCompleted; // <--- NUEVO: Si la acción ya se realizó
 
   ChatMessage({
     required this.emisor,
@@ -26,6 +29,9 @@ class ChatMessage {
     this.isStreaming = false,
     this.imagen,
     this.isAudio = false,
+    this.action,
+    this.isUploading = false,
+    this.actionCompleted = false,
   });
 }
 
@@ -484,6 +490,14 @@ class _AgrobotChatWidgetState extends State<AgrobotChatWidget>
                 _moverAlFinal();
               }
               break;
+            case 'ai_action':
+              if (mounted) {
+                setState(() {
+                  botMsg.action = parsed['data'] as Map<String, dynamic>;
+                });
+                _moverAlFinal();
+              }
+              break;
             case 'ai_end':
               if (mounted) {
                 setState(() {
@@ -535,6 +549,62 @@ class _AgrobotChatWidgetState extends State<AgrobotChatWidget>
       botMsg.isStreaming = false;
       _enviando = false;
     });
+  }
+
+  // ==========================================================
+  //  LÓGICA DE CARGA DE ARCHIVOS VÍA CHATBOT
+  // ==========================================================
+  Future<void> _subirArchivoPorAccion(ChatMessage msg) async {
+    final action = msg.action;
+    if (action == null || _enviando) return;
+
+    final String? tramiteId = action['tramite_id'];
+    if (tramiteId == null) return;
+
+    // 1. Seleccionar archivo
+    final XFile? file = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
+    if (file == null) return;
+
+    setState(() {
+      msg.isUploading = true;
+    });
+
+    try {
+      final headers = await _getAuthHeaders();
+      var request = http.MultipartRequest('POST', Uri.parse('$_serverUrl/upload'));
+      request.headers.addAll(headers);
+
+      request.fields['tramite_id'] = tramiteId;
+      request.fields['folder'] = 'tramites_chatbot';
+
+      if (kIsWeb) {
+        final bytes = await file.readAsBytes();
+        request.files.add(http.MultipartFile.fromBytes('file', bytes, filename: file.name));
+      } else {
+        request.files.add(await http.MultipartFile.fromPath('file', file.path));
+      }
+
+      final response = await request.send();
+      final respBody = await response.stream.bytesToString();
+      final result = jsonDecode(respBody);
+
+      if (response.statusCode == 200 && result['success'] == true) {
+        setState(() {
+          msg.isUploading = false;
+          msg.actionCompleted = true;
+          msg.texto += "\n\n✅ **Archivo subido correctamente.**";
+        });
+        // Notificar al bot de forma invisible
+        _enviarMensaje("Archivo '${file.name}' subido con éxito al trámite.");
+      } else {
+        throw Exception(result['message'] ?? 'Error desconocido');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error al subir: $e'), backgroundColor: Colors.red));
+      }
+      setState(() { msg.isUploading = false; });
+    }
   }
 
   void _moverAlFinal() {
@@ -822,6 +892,33 @@ class _AgrobotChatWidgetState extends State<AgrobotChatWidget>
               ),
             if (msg.texto.isNotEmpty)
               _buildTextoFormateado(msg.texto, esBot ? Colors.black87 : Colors.white),
+            
+            // --- WIDGET DE ACCIÓN (SUBIDA DE ARCHIVOS) ---
+            if (esBot && msg.action != null && msg.action!['type'] == 'UPLOAD_REQUIRED' && !msg.actionCompleted)
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: SizedBox(
+                   width: double.infinity,
+                   child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: azulClaro.withValues(alpha: 0.1),
+                      foregroundColor: azulPrincipal,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: azulClaro)),
+                      padding: const EdgeInsets.symmetric(vertical: 12)
+                    ),
+                    onPressed: msg.isUploading ? null : () => _subirArchivoPorAccion(msg),
+                    icon: msg.isUploading 
+                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(Icons.cloud_upload_outlined, size: 20),
+                    label: Text(
+                      msg.isUploading ? "SUBIENDO..." : "SUBIR ${msg.action!['nombre_sugerido'] ?? 'ARCHIVO'}",
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                    ),
+                  ),
+                ),
+              ),
+
             if (msg.isStreaming) _buildStreamingIndicator(msg.texto.isEmpty),
           ],
         ),

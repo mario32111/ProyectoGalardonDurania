@@ -46,19 +46,15 @@ const uploadFile = async (file, folder = 'uploads') => {
 
             blobStream.on('finish', async () => {
                 try {
-                    // Opción 1: Generar una URL firmada (expira después de cierto tiempo o muy lejano)
-                    // const [url] = await fileUpload.getSignedUrl({
-                    //   action: 'read',
-                    //   expires: '01-01-2100', // Fecha de expiración lejana
-                    // });
+                    // Generar una URL firmada segura (expira en el año 2100)
+                    const [url] = await fileUpload.getSignedUrl({
+                        action: 'read',
+                        expires: '01-01-2100',
+                    });
 
-                    // Opción 2: Usar la URL pública directa (requiere que tu bucket tenga reglas públicas de lectura)
-                    // Para obtener la URL pública si el bucket es público:
-                    const publicUrl = `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(fileUpload.name)}?alt=media`;
-
-                    resolve(publicUrl);
+                    resolve(url);
                 } catch (error) {
-                    reject('Error obteniendo la URL del archivo: ' + error.message);
+                    reject('Error obteniendo la URL firmada: ' + error.message);
                 }
             });
 

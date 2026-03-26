@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart'; 
-import 'package:firebase_auth/firebase_auth.dart'; // <--- AGREGADO PARA UID
+import 'package:firebase_auth/firebase_auth.dart'; 
+import 'detalle_tramite.dart'; // <--- NUEVA PANTALLA DE DETALLE
 
 const Map<String, Map<String, dynamic>> tramiteTypes = {
   'PRUEBAS_GANADO': {
@@ -295,8 +296,12 @@ class _VistaTramitesVentanillaState extends State<VistaTramitesVentanilla> {
                     );
                   }
 
-                  // Extraemos los datos y aplicamos el filtro de los botones de arriba
-                  var todosLosTramites = snapshot.data!.docs.map((doc) => doc.data() as Map<String, dynamic>).toList();
+                  // Extraemos los datos e inyectamos el ID del documento
+                  var todosLosTramites = snapshot.data!.docs.map((doc) {
+                    var data = doc.data() as Map<String, dynamic>;
+                    data['id'] = doc.id; // <--- Importante para identificar el trámite
+                    return data;
+                  }).toList();
                   
                   List<Map<String, dynamic>> tramitesFiltrados = todosLosTramites.where((tramite) {
                     String estado = (tramite['estado'] ?? '').toString().toUpperCase();
@@ -312,7 +317,10 @@ class _VistaTramitesVentanillaState extends State<VistaTramitesVentanilla> {
 
                   return ListView.builder(
                     itemCount: tramitesFiltrados.length,
-                    itemBuilder: (context, index) => _tarjetaTramite(tramitesFiltrados[index]),
+                    itemBuilder: (context, index) {
+                      final t = tramitesFiltrados[index];
+                      return _tarjetaTramite(context, t);
+                    },
                   );
                 },
               ),
@@ -418,7 +426,8 @@ class _VistaTramitesVentanillaState extends State<VistaTramitesVentanilla> {
   // ==========================================================
   // WIDGET DE LA TARJETA PRINCIPAL
   // ==========================================================
-  Widget _tarjetaTramite(Map<String, dynamic> datos) {
+  Widget _tarjetaTramite(BuildContext context, Map<String, dynamic> datos) {
+    String idTramite = datos['id'] ?? '---';
     String estado = datos['estado'] ?? 'PENDIENTE';
     var estilo = _obtenerEstiloEstado(estado);
     
@@ -434,15 +443,23 @@ class _VistaTramitesVentanillaState extends State<VistaTramitesVentanilla> {
       fechaVisual = datos['fecha_solicitud'].toString().split('T').first;
     }
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 20),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border(left: BorderSide(color: colorEstado, width: 6)),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
-      ),
+    return InkWell(
+      onTap: () {
+        Navigator.push(
+          context, 
+          MaterialPageRoute(builder: (c) => VistaDetalleTramite(tramite: datos, tramiteId: idTramite))
+        );
+      },
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 20),
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border(left: BorderSide(color: colorEstado, width: 6)),
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
+        ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -483,6 +500,7 @@ class _VistaTramitesVentanillaState extends State<VistaTramitesVentanilla> {
           )
         ],
       ),
-    );
-  }
+    ),
+  );
+}
 }
