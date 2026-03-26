@@ -1,5 +1,175 @@
+# =============================================
+# AGRO CONTROL PRO — .gitignore (Monorepo)
+# =============================================
+
+# ─── OS ──────────────────────────────────────
+.DS_Store
+Thumbs.db
+Desktop.ini
+ehthumbs.db
+*.lnk
+
+# ─── IDEs / Editores ────────────────────────
+.vscode/
+.idea/
+*.iml
+*.ipr
+*.iws
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*.swp
+*.swo
+*~
+
+# ─── Logs ────────────────────────────────────
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ─── Archivos temporales ────────────────────
+*.tmp
+*.bak
+*.orig
+
+# =============================================
+# NODE.JS (backend/ + identification/)
+# =============================================
 node_modules/
+
+# Variables de entorno
+.env
+.env.*
+!.env.example
+
+# Coverage / tests
+coverage/
+.nyc_output/
+
+# Build
+dist/
+build/
+
+# npm
+.npm
+*.tgz
+.eslintcache
+
+# Runtime
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# =============================================
+# BACKEND — Credenciales y archivos sensibles
+# =============================================
+backend/firebase-service-account.json
+backend/uploads/*
+!backend/uploads/.gitkeep
 uploads/
+
+# =============================================
+# FLUTTER / DART (mobile/)
+# =============================================
+mobile/.dart_tool/
+mobile/.flutter-plugins-dependencies
+mobile/.pub-cache/
+mobile/.pub/
+mobile/build/
+mobile/coverage/
+mobile/**/doc/api/
+mobile/**/ios/Flutter/.last_build_id
+mobile/.buildlog/
+mobile/.history
+mobile/migrate_working_dir/
+
+# Symbolication
+mobile/app.*.symbols
+
+# Obfuscation
+mobile/app.*.map.json
+
+# Android Studio build artifacts
+mobile/android/app/debug/
+mobile/android/app/profile/
+mobile/android/app/release/
+mobile/android/.gradle/
+mobile/android/local.properties
+mobile/android/**/GeneratedPluginRegistrant.java
+mobile/android/key.properties
+mobile/android/**/*.keystore
+mobile/android/**/*.jks
+
+# iOS
+mobile/ios/Pods/
+mobile/ios/.symlinks/
+mobile/ios/Flutter/Flutter.framework
+mobile/ios/Flutter/Flutter.podspec
+mobile/ios/Flutter/Generated.xcconfig
+mobile/ios/Flutter/app.flx
+mobile/ios/Flutter/flutter_assets/
+mobile/ios/Flutter/flutter_export_environment.sh
+mobile/ios/ServiceDefinitions.json
+mobile/ios/Runner/GeneratedPluginRegistrant.*
+
+# Windows
+mobile/windows/flutter/ephemeral/
+
+# Linux
+mobile/linux/flutter/ephemeral/
+
+# macOS
+mobile/macos/Flutter/ephemeral/
+mobile/macos/Pods/
+
+# =============================================
+# PYTHON (IAService/)
+# =============================================
 __pycache__/
 *.pyc
-.env
+*.pyo
+*.pyd
+*.egg-info/
+*.egg
+.eggs/
+*.whl
+
+# Virtual environments
+venv/
+.venv/
+env/
+.env/
+
+# Modelos Whisper descargados (muy pesados)
+IAService/models_whisper/
+
+# Pytest
+.pytest_cache/
+
+# Archivos temporales de transcripción
+IAService/temp_*
+
+# =============================================
+# IDENTIFICATION — Credenciales
+# =============================================
+identification/credentials.json
+
+# =============================================
+# OPENCODE
+# =============================================
+.opencode/
+
+# =============================================
+# FIREBASE
+# =============================================
+.firebase/
+firebase-debug.log
+firebase-debug.*.log
+*-service-account.json

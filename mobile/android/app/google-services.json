@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "273325715965",
+    "project_id": "agro-60b75",
+    "storage_bucket": "agro-60b75.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:273325715965:android:d014eee57beddb2ff06994",
+        "android_client_info": {
+          "package_name": "com.example.agro_control_pro"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAZRC3xOO6oJBbObSlJbqKL3OOhs-Vn38E"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

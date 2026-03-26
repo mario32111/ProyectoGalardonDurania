@@ -1,0 +1,10 @@
+# Python (IAService)
+__pycache__/
+*.pyc
+venv/
+.venv/
+.pytest_cache/
+build/
+dist/
+*.egg-info/
+models_whisper/

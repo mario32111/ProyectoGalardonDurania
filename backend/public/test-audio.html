@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎙️ Test Audio - Chatbot Ganadero</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background: #0f172a;
+            color: #e2e8f0;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 750px;
+            width: 100%;
+        }
+
+        h1 {
+            text-align: center;
+            margin: 20px 0;
+            font-size: 1.5rem;
+            color: #38bdf8;
+        }
+
+        .card {
+            background: #1e293b;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 16px;
+            border: 1px solid #334155;
+        }
+
+        .card h2 {
+            font-size: 1.1rem;
+            color: #94a3b8;
+            margin-bottom: 16px;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 16px;
+        }
+
+        button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+
+        button:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        .btn-record {
+            background: #ef4444;
+            color: white;
+        }
+
+        .btn-record:hover:not(:disabled) {
+            background: #dc2626;
+        }
+
+        .btn-record.recording {
+            background: #dc2626;
+            animation: pulse 1s infinite;
+        }
+
+        .btn-stop {
+            background: #64748b;
+            color: white;
+        }
+
+        .btn-stop:hover:not(:disabled) {
+            background: #475569;
+        }
+
+        .btn-send {
+            background: #3b82f6;
+            color: white;
+        }
+
+        .btn-send:hover:not(:disabled) {
+            background: #2563eb;
+        }
+
+        .btn-chat {
+            background: #10b981;
+            color: white;
+        }
+
+        .btn-chat:hover:not(:disabled) {
+            background: #059669;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4);
+            }
+
+            50% {
+                box-shadow: 0 0 0 10px rgba(239, 68, 68, 0);
+            }
+        }
+
+        @keyframes blink {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0;
+            }
+        }
+
+        .status {
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            margin-bottom: 12px;
+        }
+
+        .status.info {
+            background: #1e3a5f;
+            color: #93c5fd;
+        }
+
+        .status.success {
+            background: #14532d;
+            color: #86efac;
+        }
+
+        .status.error {
+            background: #450a0a;
+            color: #fca5a5;
+        }
+
+        .status.recording {
+            background: #431407;
+            color: #fdba74;
+        }
+
+        .status.streaming {
+            background: #3b0764;
+            color: #d8b4fe;
+        }
+
+        .result {
+            background: #0f172a;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            padding: 16px;
+            margin-top: 12px;
+            white-space: pre-wrap;
+            font-family: 'Cascadia Code', 'Consolas', monospace;
+            font-size: 0.85rem;
+            max-height: 300px;
+            overflow-y: auto;
+            line-height: 1.6;
+        }
+
+        .label {
+            font-size: 0.8rem;
+            color: #64748b;
+            margin-bottom: 4px;
+            margin-top: 12px;
+        }
+
+        .transcription {
+            color: #fbbf24;
+            font-size: 1.05rem;
+            font-weight: 600;
+            padding: 12px;
+            background: #1a1a2e;
+            border-radius: 8px;
+            margin-top: 8px;
+            min-height: 20px;
+        }
+
+        .ai-response {
+            color: #34d399;
+            padding: 12px;
+            background: #0d1b2a;
+            border-radius: 8px;
+            margin-top: 8px;
+            line-height: 1.6;
+            font-size: 1rem;
+            min-height: 20px;
+        }
+
+        .ai-response .cursor {
+            display: inline-block;
+            width: 2px;
+            height: 1em;
+            background: #34d399;
+            margin-left: 2px;
+            animation: blink 0.7s infinite;
+            vertical-align: text-bottom;
+        }
+
+        select,
+        input[type="text"],
+        textarea {
+            padding: 8px 12px;
+            border-radius: 6px;
+            border: 1px solid #475569;
+            background: #0f172a;
+            color: #e2e8f0;
+            font-size: 0.9rem;
+            margin-bottom: 8px;
+            font-family: inherit;
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 60px;
+            width: 100%;
+        }
+
+        .row {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .row label {
+            font-size: 0.85rem;
+            color: #94a3b8;
+            min-width: 80px;
+        }
+
+        hr {
+            border: none;
+            border-top: 1px solid #334155;
+            margin: 16px 0;
+        }
+
+        .log-entry {
+            color: #64748b;
+            font-size: 0.8rem;
+            font-style: italic;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>🎙️ Test Chatbot Ganadero — Streaming</h1>
+
+        <!-- Configuración -->
+        <div class="card">
+            <h2>⚙️ Configuración</h2>
+            <div class="row">
+                <label>Servidor:</label>
+                <input type="text" id="serverUrl" value="http://localhost:3000" style="flex:1">
+            </div>
+            <div class="row">
+                <label>Session ID:</label>
+                <input type="text" id="sessionId" value="test-1234" style="flex:1">
+            </div>
+        </div>
+
+        <!-- Modo Texto -->
+        <div class="card">
+            <h2>💬 Chat por Texto (SSE Stream)</h2>
+            <textarea id="textMessage"
+                placeholder="Escribe tu mensaje aquí...">¿Cómo registro un nuevo animal?</textarea>
+            <div class="btn-group">
+                <button class="btn-chat" id="btnSendText" onclick="sendTextMessage()">
+                    🚀 Enviar Mensaje (Stream)
+                </button>
+            </div>
+        </div>
+
+        <!-- Modo Audio -->
+        <div class="card">
+            <h2>🎙️ Chat por Audio (SSE Stream)</h2>
+            <p style="font-size:0.85rem; color:#64748b; margin-bottom:12px;">
+                Graba audio → se transcribe → la respuesta IA llega en streaming.
+            </p>
+
+            <div id="httpStatus" class="status info">Listo para grabar</div>
+
+            <div class="btn-group">
+                <button class="btn-record" id="btnRecord" onclick="startRecording()">
+                    🎙️ Grabar Audio
+                </button>
+                <button class="btn-stop" id="btnStopRecord" onclick="stopRecording()" disabled>
+                    ⏹️ Detener
+                </button>
+            </div>
+
+            <div class="btn-group">
+                <button class="btn-send" id="btnTranscribe" onclick="sendAudio('audio')" disabled>
+                    📝 Solo Transcribir
+                </button>
+                <button class="btn-chat" id="btnAudioChat" onclick="sendAudio('audio-chat')" disabled>
+                    🤖 Transcribir + Chat (Stream)
+                </button>
+            </div>
+        </div>
+
+        <!-- Resultado con streaming -->
+        <div class="card" id="resultCard" style="display:none">
+            <h2>📋 Resultado</h2>
+
+            <div class="label" id="transcriptionLabel" style="display:none">📝 Transcripción:</div>
+            <div class="transcription" id="transcriptionText" style="display:none"></div>
+
+            <div class="label">🤖 Respuesta IA:</div>
+            <div class="ai-response" id="aiResponseText">—</div>
+
+            <div id="logContainer"></div>
+
+            <hr>
+            <div class="label">📡 Eventos SSE (raw):</div>
+            <div class="result" id="rawEvents"></div>
+        </div>
+    </div>
+
+    <script>
+        let mediaRecorder = null;
+        let audioChunks = [];
+        let audioBlob = null;
+
+        // ==========================================
+        // ENVÍO DE TEXTO CON SSE STREAMING
+        // ==========================================
+        async function sendTextMessage() {
+            const message = document.getElementById('textMessage').value.trim();
+            if (!message) return;
+
+            const serverUrl = document.getElementById('serverUrl').value;
+            const sessionId = document.getElementById('sessionId').value;
+
+            // Preparar UI
+            showResultCard();
+            document.getElementById('transcriptionLabel').style.display = 'none';
+            document.getElementById('transcriptionText').style.display = 'none';
+            document.getElementById('btnSendText').disabled = true;
+
+            try {
+                const response = await fetch(`${serverUrl}/chatbot/message`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message, session_id: sessionId })
+                });
+
+                await readSSEStream(response);
+            } catch (err) {
+                appendRawEvent(`ERROR: ${err.message}`);
+            } finally {
+                document.getElementById('btnSendText').disabled = false;
+            }
+        }
+
+        // ==========================================
+        // GRABACIÓN DE AUDIO
+        // ==========================================
+        async function startRecording() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+                audioChunks = [];
+
+                mediaRecorder.ondataavailable = (e) => {
+                    if (e.data.size > 0) audioChunks.push(e.data);
+                };
+
+                mediaRecorder.onstop = () => {
+                    audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                    stream.getTracks().forEach(t => t.stop());
+                    setStatus('httpStatus', `✅ Audio grabado (${(audioBlob.size / 1024).toFixed(1)}KB)`, 'success');
+                    document.getElementById('btnTranscribe').disabled = false;
+                    document.getElementById('btnAudioChat').disabled = false;
+                };
+
+                mediaRecorder.start();
+                setStatus('httpStatus', '🔴 Grabando... Habla ahora', 'recording');
+
+                document.getElementById('btnRecord').disabled = true;
+                document.getElementById('btnRecord').classList.add('recording');
+                document.getElementById('btnStopRecord').disabled = false;
+                document.getElementById('btnTranscribe').disabled = true;
+                document.getElementById('btnAudioChat').disabled = true;
+            } catch (err) {
+                setStatus('httpStatus', '❌ Error accediendo al micrófono: ' + err.message, 'error');
+            }
+        }
+
+        function stopRecording() {
+            if (mediaRecorder && mediaRecorder.state === 'recording') {
+                mediaRecorder.stop();
+            }
+            document.getElementById('btnRecord').disabled = false;
+            document.getElementById('btnRecord').classList.remove('recording');
+            document.getElementById('btnStopRecord').disabled = true;
+        }
+
+        // ==========================================
+        // ENVÍO DE AUDIO
+        // ==========================================
+        async function sendAudio(endpoint) {
+            if (!audioBlob) {
+                setStatus('httpStatus', '⚠️ Primero graba un audio', 'error');
+                return;
+            }
+
+            const serverUrl = document.getElementById('serverUrl').value;
+            const sessionId = document.getElementById('sessionId').value;
+
+            showResultCard();
+            setStatus('httpStatus', '⏳ Enviando audio al servidor...', 'info');
+            document.getElementById('btnTranscribe').disabled = true;
+            document.getElementById('btnAudioChat').disabled = true;
+
+            try {
+                const formData = new FormData();
+                formData.append('audio', audioBlob, 'recording.webm');
+                formData.append('session_id', sessionId);
+
+                const response = await fetch(`${serverUrl}/chatbot/${endpoint}`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (endpoint === 'audio') {
+                    // /audio no hace streaming, devuelve JSON
+                    const responseText = await response.text();
+                    let data;
+                    try {
+                        data = JSON.parse(responseText);
+                    } catch (e) {
+                        setStatus('httpStatus', `❌ Error: ${responseText.substring(0, 200)}`, 'error');
+                        return;
+                    }
+                    document.getElementById('transcriptionLabel').style.display = 'block';
+                    document.getElementById('transcriptionText').style.display = 'block';
+                    document.getElementById('transcriptionText').textContent = data.data?.text || '—';
+                    document.getElementById('aiResponseText').textContent = '(Solo transcripción, sin chat)';
+                    appendRawEvent(JSON.stringify(data, null, 2));
+                    setStatus('httpStatus', '✅ Transcripción completada', 'success');
+                } else {
+                    // /audio-chat hace streaming SSE
+                    setStatus('httpStatus', '📡 Recibiendo stream...', 'streaming');
+                    await readSSEStream(response);
+                    setStatus('httpStatus', '✅ Stream completado', 'success');
+                }
+            } catch (err) {
+                setStatus('httpStatus', '❌ Error: ' + err.message, 'error');
+            } finally {
+                document.getElementById('btnTranscribe').disabled = false;
+                document.getElementById('btnAudioChat').disabled = false;
+            }
+        }
+
+        // ==========================================
+        // LECTOR DE SSE STREAM (el corazón)
+        // ==========================================
+        async function readSSEStream(response) {
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            const aiEl = document.getElementById('aiResponseText');
+            let fullText = '';
+            let buffer = '';
+
+            // Iniciar con cursor parpadeante
+            aiEl.innerHTML = '<span class="cursor"></span>';
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                buffer += decoder.decode(value, { stream: true });
+
+                // Procesar líneas completas del buffer
+                const lines = buffer.split('\n');
+                // Guardar la última línea incompleta en el buffer
+                buffer = lines.pop();
+
+                for (const line of lines) {
+                    if (!line.startsWith('data: ')) continue;
+
+                    const raw = line.substring(6); // quitar "data: "
+                    appendRawEvent(raw);
+
+                    if (raw === '[DONE]') {
+                        // Quitar cursor
+                        aiEl.innerHTML = fullText;
+                        appendRawEvent('--- FIN DEL STREAM ---');
+                        return;
+                    }
+
+                    try {
+                        const parsed = JSON.parse(raw);
+
+                        switch (parsed.event) {
+                            case 'ai_chunk':
+                                fullText += parsed.chunk;
+                                aiEl.innerHTML = fullText + '<span class="cursor"></span>';
+                                // Auto-scroll
+                                aiEl.scrollTop = aiEl.scrollHeight;
+                                break;
+
+                            case 'ai_end':
+                                // Respuesta completa recibida
+                                fullText = parsed.fullResponse;
+                                aiEl.innerHTML = fullText;
+                                break;
+
+                            case 'transcription':
+                                // Evento de transcripción (solo audio-chat)
+                                document.getElementById('transcriptionLabel').style.display = 'block';
+                                document.getElementById('transcriptionText').style.display = 'block';
+                                document.getElementById('transcriptionText').textContent = parsed.text;
+                                break;
+
+                            case 'ai_log':
+                                appendLog(parsed.message);
+                                break;
+
+                            case 'error':
+                                fullText += `\n❌ Error: ${parsed.error}`;
+                                aiEl.innerHTML = fullText;
+                                break;
+                        }
+                    } catch (e) {
+                        // JSON inválido, ignorar
+                    }
+                }
+            }
+
+            // Si terminamos sin [DONE], quitar cursor
+            aiEl.innerHTML = fullText || '(sin respuesta)';
+        }
+
+        // ==========================================
+        // HELPERS DE UI
+        // ==========================================
+        function showResultCard() {
+            document.getElementById('resultCard').style.display = 'block';
+            document.getElementById('aiResponseText').innerHTML = '';
+            document.getElementById('rawEvents').textContent = '';
+            document.getElementById('logContainer').innerHTML = '';
+            document.getElementById('transcriptionLabel').style.display = 'none';
+            document.getElementById('transcriptionText').style.display = 'none';
+        }
+
+        function appendRawEvent(text) {
+            const el = document.getElementById('rawEvents');
+            el.textContent += text + '\n';
+            el.scrollTop = el.scrollHeight;
+        }
+
+        function appendLog(message) {
+            const container = document.getElementById('logContainer');
+            const p = document.createElement('p');
+            p.className = 'log-entry';
+            p.textContent = `🔧 ${message}`;
+            container.appendChild(p);
+        }
+
+        function setStatus(elementId, message, type) {
+            const el = document.getElementById(elementId);
+            el.textContent = message;
+            el.className = 'status ' + type;
+        }
+    </script>
+</body>
+
+</html>
