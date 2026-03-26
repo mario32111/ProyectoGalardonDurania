@@ -300,4 +300,49 @@ router.post('/api/wallet/class', async (req, res) => {
   }
 });
 
+// API para que el App Móvil obtenga el link directo de guardado
+router.get('/api/save-link/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // 1. Buscamos la data del objeto en Firestore
+    const doc = await db.collection(collectionName).doc(id).get();
+    if (!doc.exists) return res.status(404).json({ success: false, message: 'Credencial no encontrada' });
+    
+    const credData = doc.data();
+
+    // 2. Re-construimos el objeto para el JWT (Google requiere la estructura completa del objeto)
+    // Para simplificar, obtenemos el objeto actual desde el API de Google Wallet
+    const client = await walletService.getClient();
+    const googleResponse = await client.request({
+      url: `https://walletobjects.googleapis.com/walletobjects/v1/genericObject/${id}`,
+      method: 'GET'
+    });
+    
+    const googleObject = googleResponse.data;
+
+    // 3. Generamos el link firmado
+    const saveUrl = await walletService.createSaveToWalletUrl(googleObject);
+
+    res.json({ success: true, url: saveUrl });
+  } catch (error) {
+    console.error('Error generating Google Wallet link:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// Listar todas las credenciales en formato JSON
+router.get('/api/list', async (req, res) => {
+  try {
+    const snapshot = await db.collection(collectionName).get();
+    const credentials = [];
+    snapshot.forEach(doc => {
+      credentials.push({ id: doc.id, ...doc.data() });
+    });
+    res.json({ success: true, data: credentials });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 module.exports = router;

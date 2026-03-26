@@ -1,5 +1,7 @@
 const { GoogleAuth } = require('google-auth-library');
 const path = require('path');
+const jwt = require('jsonwebtoken');
+const fs = require('fs');
 
 class GoogleWalletService {
   constructor() {
@@ -14,6 +16,13 @@ class GoogleWalletService {
       keyFile: fullPath,
       scopes: ['https://www.googleapis.com/auth/wallet_object.issuer']
     });
+
+    // Leer el archivo para firmar JWTs manualmente
+    try {
+      this.credentials = JSON.parse(fs.readFileSync(fullPath, 'utf8'));
+    } catch (e) {
+      console.error('Error reading wallet credentials for JWT signing:', e);
+    }
   }
 
   async getClient() {
@@ -118,6 +127,31 @@ class GoogleWalletService {
       method: 'DELETE'
     });
     return response.data;
+  }
+
+  /**
+   * Genera un JWT firmado para el botón "Save to Google Wallet"
+   * @param {Object} genericObject El objeto ya creado
+   * @returns {string} URL completa de guardado
+   */
+  async createSaveToWalletUrl(genericObject) {
+    if (!this.credentials || !this.credentials.private_key) {
+      throw new Error('No se cargaron las credenciales necesarias para firmar el JWT');
+    }
+
+    const payload = {
+      iss: this.credentials.client_email,
+      aud: 'google',
+      typ: 'savetowallet',
+      iat: Math.floor(Date.now() / 1000),
+      // No incluimos 'origins' para pruebas locales/móvil
+      payload: {
+        genericObjects: [genericObject]
+      }
+    };
+
+    const token = jwt.sign(payload, this.credentials.private_key, { algorithm: 'RS256' });
+    return `https://pay.google.com/gp/v/save/${token}`;
   }
 }
 

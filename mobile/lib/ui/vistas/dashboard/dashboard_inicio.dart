@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart'; // <--- AGREGADO PARA FILTRADO Y UID
+import 'id_digital.dart';
 
 class VistaDashboardInicio extends StatefulWidget {
   const VistaDashboardInicio({super.key});
@@ -126,6 +127,74 @@ class _VistaDashboardInicioState extends State<VistaDashboardInicio> {
         setState(() => _estaCargando = false);
       }
     }
+  }
+
+  void _mostrarNotificaciones(BuildContext context, Color colorTema) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        height: MediaQuery.of(context).size.height * 0.75,
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.only(topLeft: Radius.circular(30), topRight: Radius.circular(30)),
+        ),
+        child: Column(
+          children: [
+            Container(
+              margin: const EdgeInsets.only(top: 12),
+              width: 40, height: 4, 
+              decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2)),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(25.0),
+              child: Row(
+                children: [
+                  Icon(Icons.notifications_active_rounded, color: colorTema),
+                  const SizedBox(width: 12),
+                  const Text("Centro de Alertas", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            Expanded(
+              child: _listaAlertas.isEmpty 
+                ? const Center(child: Text("No hay notificaciones pendientes"))
+                : ListView.builder(
+                    padding: const EdgeInsets.all(15),
+                    itemCount: _listaAlertas.length,
+                    itemBuilder: (context, index) {
+                      final alerta = _listaAlertas[index];
+                      Color col;
+                      IconData ico;
+                      switch(alerta['tipo']) {
+                        case 'critico': col = Colors.red; ico = Icons.error_outline; break;
+                        case 'advertencia': col = Colors.orange; ico = Icons.warning_amber_rounded; break;
+                        case 'info': col = Colors.green; ico = Icons.info_outline; break;
+                        default: col = Colors.blue; ico = Icons.notifications_none;
+                      }
+                      return Card(
+                        elevation: 0,
+                        margin: const EdgeInsets.only(bottom: 12),
+                        color: col.withOpacity(0.05),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(15),
+                          side: BorderSide(color: col.withOpacity(0.2)),
+                        ),
+                        child: ListTile(
+                          leading: CircleAvatar(backgroundColor: col.withOpacity(0.1), child: Icon(ico, color: col)),
+                          title: Text(alerta['titulo'], style: const TextStyle(fontWeight: FontWeight.bold)),
+                          subtitle: Text(alerta['mensaje']),
+                        ),
+                      );
+                    },
+                  ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   // ==============================================================================
@@ -321,7 +390,7 @@ class _VistaDashboardInicioState extends State<VistaDashboardInicio> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // --- HEADER ---
-                  Row(
+                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Column(
@@ -331,23 +400,46 @@ class _VistaDashboardInicioState extends State<VistaDashboardInicio> {
                           const Text("Rancho en Guadalupe Victoria", style: TextStyle(color: Colors.grey, fontSize: 16)),
                         ],
                       ),
-                      if (!esMovil) WidgetAnimacionHover(scale: 1.05, child: _widgetClima()),
+                      if (esMovil)
+                        Stack(
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.notifications_none_rounded, size: 28, color: Colors.black87),
+                              onPressed: () => _mostrarNotificaciones(context, azulAgro),
+                            ),
+                            if (_listaAlertas.where((a) => a['tipo'] == 'critico').isNotEmpty)
+                              Positioned(
+                                right: 8,
+                                top: 8,
+                                child: Container(
+                                  padding: const EdgeInsets.all(4),
+                                  decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                                  constraints: const BoxConstraints(minWidth: 8, minHeight: 8),
+                                ),
+                              )
+                          ],
+                        )
+                      else
+                        WidgetAnimacionHover(scale: 1.05, child: _widgetClima()),
                     ],
                   ),
                   
                   const SizedBox(height: 30),
 
-                  // --- TARJETAS KPI ---
+                  if (esMovil) ...[
+                    WidgetAnimacionHover(scale: 1.05, child: _widgetClima()),
+                    const SizedBox(height: 25),
+                  ],
+
+                  // --- TARJETAS KPI (Layout Adaptado) ---
                   if (esMovil)
-                    Column(
+                    Row(
                       children: [
-                        WidgetAnimacionHover(scale: 1.02, child: _widgetClima()),
-                        const SizedBox(height: 20),
-                        WidgetAnimacionHover(scale: 1.02, child: _kpiCard("Total Cabezas", _totalCabezas, Icons.grass, azulAgro)),
-                        const SizedBox(height: 15),
-                        WidgetAnimacionHover(scale: 1.02, child: _kpiCard("Alertas de Stock", _alertasStock, Icons.warning_amber_rounded, int.parse(_alertasStock) > 0 ? Colors.red : Colors.orange)),
-                        const SizedBox(height: 15),
-                        WidgetAnimacionHover(scale: 1.02, child: _kpiCard("Ventas Acumuladas", _ventasMes, Icons.attach_money, verdeVenta)),
+                        Expanded(child: WidgetAnimacionHover(scale: 1.05, child: _miniKpiCard("Ganado", _totalCabezas, Icons.grass, azulAgro))),
+                        const SizedBox(width: 8),
+                        Expanded(child: WidgetAnimacionHover(scale: 1.05, child: _miniKpiCard("Alertas", _alertasStock, Icons.warning_amber_rounded, int.parse(_alertasStock) > 0 ? Colors.red : Colors.orange))),
+                        const SizedBox(width: 8),
+                        Expanded(child: WidgetAnimacionHover(scale: 1.05, child: _miniKpiCard("Ventas", _ventasMes, Icons.attach_money, verdeVenta))),
                       ],
                     )
                   else
@@ -374,8 +466,6 @@ class _VistaDashboardInicioState extends State<VistaDashboardInicio> {
                   if (esMovil)
                     Column(
                       children: [
-                        _seccionAlertas(azulAgro),
-                        const SizedBox(height: 20),
                         _seccionGraficaInteractiva(), 
                       ],
                     )
@@ -454,6 +544,49 @@ class _VistaDashboardInicioState extends State<VistaDashboardInicio> {
     );
   }
 
+  Widget _miniKpiCard(String titulo, String valor, IconData icono, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 4))],
+        border: Border(left: BorderSide(color: color, width: 4)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icono, color: color, size: 22),
+          const SizedBox(height: 6),
+          FittedBox(child: Text(valor, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
+          Text(titulo, style: TextStyle(fontSize: 11, color: Colors.grey[600]), maxLines: 1, overflow: TextOverflow.ellipsis),
+        ],
+      ),
+    );
+  }
+
+  Widget _widgetClimaMini() {
+    return Container(
+      width: 130,
+      padding: const EdgeInsets.all(15),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(colors: [Color(0xFF4FC3F7), Color(0xFF0288D1)]),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [BoxShadow(color: Colors.blue.withOpacity(0.2), blurRadius: 10, offset: const Offset(0, 4))],
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: const [
+          Icon(Icons.wb_sunny, color: Colors.yellow, size: 24),
+          SizedBox(height: 8),
+          Text("28°C", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+          Text("Soleado", style: TextStyle(color: Colors.white70, fontSize: 10)),
+        ],
+      ),
+    );
+  }
+
   Widget _widgetClima() {
     return GestureDetector(
       onTap: () {
@@ -487,9 +620,34 @@ class _VistaDashboardInicioState extends State<VistaDashboardInicio> {
   }
 
   Widget _seccionAccesosRapidos(Color colorTema) {
+    final bool esMovil = MediaQuery.of(context).size.width < 650;
+    
+    if (esMovil) {
+      return GridView.count(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        crossAxisCount: 3,
+        crossAxisSpacing: 10,
+        mainAxisSpacing: 10,
+        childAspectRatio: 0.85,
+        children: [
+          _botonRapidoMini(Icons.add_circle, "Animal", colorTema, 
+            () => _abrirAccionRapida("Registrar Nuevo Animal", Icons.pets, colorTema, "ganado", "identificador_arete")),
+          _botonRapidoMini(Icons.local_hospital, "Salud", Colors.redAccent, 
+            () => _abrirAccionRapida("Reporte Veterinario", Icons.medical_services, Colors.redAccent, "reportes_salud", "descripcion_sintomas")),
+          _botonRapidoMini(Icons.attach_money, "Venta", Colors.green, 
+            () => _abrirAccionRapida("Nueva Venta Rápida", Icons.point_of_sale, Colors.green, "ventas_salidas", "monto_total", esNumero: true)),
+          _botonRapidoMini(Icons.inventory, "Insumos", Colors.orange, 
+            () => _abrirAccionRapida("Solicitar Alimento", Icons.local_shipping, Colors.orange, "pedidos_inventario", "insumo_solicitado")),
+          _botonRapidoMini(Icons.badge, "Mi ID", Colors.blueGrey, 
+            () => Navigator.push(context, MaterialPageRoute(builder: (context) => const VistaIdDigital()))),
+        ],
+      );
+    }
+
     return Wrap(
-      spacing: 35, // <--- AQUÍ AUMENTAMOS LA SEPARACIÓN HORIZONTAL
-      runSpacing: 25, // <--- AQUÍ AUMENTAMOS LA SEPARACIÓN VERTICAL
+      spacing: 35,
+      runSpacing: 25,
       alignment: WrapAlignment.spaceEvenly,
       children: [
         WidgetAnimacionHover(
@@ -512,7 +670,34 @@ class _VistaDashboardInicioState extends State<VistaDashboardInicio> {
           child: _botonRapido(Icons.inventory_2_outlined, "Pedir\nInsumos", Colors.orange, 
             () => _abrirAccionRapida("Solicitar Alimento", Icons.local_shipping, Colors.orange, "pedidos_inventario", "insumo_solicitado")),
         ),
+        WidgetAnimacionHover(
+          scale: 1.1,
+          child: _botonRapido(Icons.badge_outlined, "ID\nDigital", Colors.blueGrey, 
+            () => Navigator.push(context, MaterialPageRoute(builder: (context) => const VistaIdDigital()))),
+        ),
       ],
+    );
+  }
+
+  Widget _botonRapidoMini(IconData icon, String label, Color color, VoidCallback onTap) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(15),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.12), 
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: color, size: 28),
+          ),
+          const SizedBox(height: 10),
+          Text(label, textAlign: TextAlign.center, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.black54)),
+        ],
+      ),
     );
   }
 
