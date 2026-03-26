@@ -35,8 +35,8 @@
             resultDiv.textContent = 'Procesando... esto puede tomar unos segundos.';
 
             try {
-                // Asumiendo que tu API corre en el puerto 3000
-                const response = await fetch('http://localhost:3000/predict', {
+                // API local en el puerto 3002 con el script predict.py
+                const response = await fetch('http://localhost:3002/predict', {
                     method: 'POST',
                     body: formData
                 });
