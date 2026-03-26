@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Probar API de Vacas</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; max-width: 600px; margin: 0 auto; }
+        .result { margin-top: 20px; padding: 15px; background: #f0f0f0; border-radius: 5px; white-space: pre-wrap; font-family: monospace; }
+        button { padding: 10px 15px; margin-top: 10px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <h2>Subir Imagen para YOLO</h2>
+    <input type="file" id="imagenInput" accept="image/*">
+    <br>
+    <button onclick="subirImagen()">Enviar a la API</button>
+
+    <div id="resultado" class="result" style="display: none;"></div>
+
+    <script>
+        async function subirImagen() {
+            const input = document.getElementById('imagenInput');
+            const resultDiv = document.getElementById('resultado');
+            
+            if (input.files.length === 0) {
+                alert('Por favor selecciona una imagen primero.');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('imagen', input.files[0]);
+
+            resultDiv.style.display = 'block';
+            resultDiv.textContent = 'Procesando... esto puede tomar unos segundos.';
+
+            try {
+                // Asumiendo que tu API corre en el puerto 3000
+                const response = await fetch('http://localhost:3000/predict', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                resultDiv.textContent = JSON.stringify(data, null, 2);
+            } catch (error) {
+                resultDiv.textContent = 'Error de conexión: ' + error.message;
+            }
+        }
+    </script>
+</body>
+</html>

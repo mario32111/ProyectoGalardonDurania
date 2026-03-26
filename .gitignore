@@ -73,6 +73,7 @@ pids/
 backend/firebase-service-account.json
 backend/uploads/*
 !backend/uploads/.gitkeep
+uploads/
 
 # =============================================
 # FLUTTER / DART (mobile/)
