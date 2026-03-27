@@ -22,13 +22,23 @@ import 'ui/vistas/Docs/Docs.dart';
 // --- MOTOR DE ARRANQUE CON FIREBASE ---
 void main() async {
   WidgetsFlutterBinding.ensureInitialized(); 
+  print('🚀 Iniciando aplicación...');
   
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
-  
-  await NotificationService().initialize();
+  try {
+    print('🔥 Inicializando Firebase...');
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+    print('✅ Firebase inicializado');
+    
+    print('🔔 Inicializando NotificationService...');
+    await NotificationService().initialize();
+    print('✅ NotificationService inicializado');
+  } catch (e) {
+    print('❌ Error durante la inicialización: $e');
+  }
 
+  print('🏁 Ejecutando runApp...');
   runApp(const AgroControlApp());
 }
 

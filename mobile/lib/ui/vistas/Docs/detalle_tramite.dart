@@ -252,6 +252,48 @@ class _VistaDetalleTramiteState extends State<VistaDetalleTramite> {
                           ),
                         ],
                       ),
+                      if (doc['analisis_ia'] != null) ...[
+                        const SizedBox(height: 6),
+                        InkWell(
+                          onTap: () => _mostrarAnalisisIA(doc['analisis_ia']),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: (doc['analisis_ia']['veraz'] == true && doc['analisis_ia']['legible'] == true)
+                                  ? Colors.green.withOpacity(0.1)
+                                  : Colors.orange.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  (doc['analisis_ia']['veraz'] == true && doc['analisis_ia']['legible'] == true)
+                                      ? Icons.check_circle
+                                      : Icons.warning_amber_rounded,
+                                  size: 10,
+                                  color: (doc['analisis_ia']['veraz'] == true && doc['analisis_ia']['legible'] == true)
+                                      ? Colors.green
+                                      : Colors.orange,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  (doc['analisis_ia']['veraz'] == true && doc['analisis_ia']['legible'] == true)
+                                      ? "IA: OK"
+                                      : "IA: REVISAR",
+                                  style: TextStyle(
+                                    fontSize: 8,
+                                    fontWeight: FontWeight.bold,
+                                    color: (doc['analisis_ia']['veraz'] == true && doc['analisis_ia']['legible'] == true)
+                                        ? Colors.green
+                                        : Colors.orange,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -260,6 +302,65 @@ class _VistaDetalleTramiteState extends State<VistaDetalleTramite> {
           ),
         );
       },
+    );
+  }
+
+  void _mostrarAnalisisIA(Map<String, dynamic> analisis) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Icon(
+              analisis['veraz'] == true && analisis['legible'] == true
+                  ? Icons.verified_user
+                  : Icons.warning_amber_rounded,
+              color: analisis['veraz'] == true && analisis['legible'] == true
+                  ? Colors.green
+                  : Colors.orange,
+            ),
+            const SizedBox(width: 10),
+            const Text("Análisis de IA"),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _itemAnalisis("Legibilidad", analisis['legible'] == true),
+            _itemAnalisis("Veracidad", analisis['veraz'] == true),
+            const Divider(height: 30),
+            const Text("Resultado del análisis:", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+            const SizedBox(height: 8),
+            Text(
+              analisis['observaciones'] ?? "Sin observaciones detalladas.",
+              style: const TextStyle(fontSize: 13, height: 1.4),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("ENTENDIDO", style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _itemAnalisis(String label, bool ok) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Icon(ok ? Icons.check_circle : Icons.cancel, 
+               size: 16, color: ok ? Colors.green : Colors.red),
+          const SizedBox(width: 8),
+          Text("$label: ", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+          Text(ok ? "OK" : "Error/Duda", style: TextStyle(color: ok ? Colors.green : Colors.red, fontSize: 12)),
+        ],
+      ),
     );
   }
 
