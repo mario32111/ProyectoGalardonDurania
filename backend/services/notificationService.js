@@ -41,11 +41,32 @@ class NotificationService {
       }
 
       // 3. Preparar el mensaje FCM
-      // Usamos el campo 'data' para que el móvil pueda manejar la lógica visual dinámicamente
+      // Mapeo para Android nativo (Background)
+      let icon = 'ic_stat_default';
+      let color = '#01579B'; // Azul default
+      
+      if (tipo === 'critico') {
+        icon = 'ic_stat_critico';
+        color = '#F44336'; // Rojo
+      } else if (tipo === 'advertencia') {
+        icon = 'ic_stat_warning';
+        color = '#FF9800'; // Naranja
+      } else if (tipo === 'info') {
+        icon = 'ic_stat_info';
+        color = '#4CAF50'; // Verde
+      }
+
       const message = {
         notification: {
           title: titulo,
           body: mensaje,
+        },
+        android: {
+          notification: {
+            icon: icon,
+            color: color,
+            channelId: 'high_importance_channel', // Coincidir con el canal en Flutter
+          }
         },
         data: {
           ...data,

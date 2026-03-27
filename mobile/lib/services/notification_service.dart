@@ -101,12 +101,19 @@ class NotificationService {
     final data = message.data;
 
     if (notification != null) {
-      // Mapeo de colores basado en el tipo
-      // 'critico', 'advertencia', 'info', 'general'
       int colorValue = 0xFF01579B; // Azul default
-      if (data['tipo'] == 'critico') colorValue = 0xFFF44336;
-      if (data['tipo'] == 'advertencia') colorValue = 0xFFFF9800;
-      if (data['tipo'] == 'info') colorValue = 0xFF4CAF50;
+      String iconName = 'ic_stat_default';
+
+      if (data['tipo'] == 'critico') {
+        colorValue = 0xFFF44336;
+        iconName = 'ic_stat_critico';
+      } else if (data['tipo'] == 'advertencia') {
+        colorValue = 0xFFFF9800;
+        iconName = 'ic_stat_warning';
+      } else if (data['tipo'] == 'info') {
+        colorValue = 0xFF4CAF50;
+        iconName = 'ic_stat_info';
+      }
 
       _localNotifications.show(
         notification.hashCode,
@@ -119,7 +126,7 @@ class NotificationService {
             channelDescription: 'Canal para alertas críticas del rancho',
             importance: fln.Importance.max,
             priority: fln.Priority.high,
-            icon: '@mipmap/ic_launcher',
+            icon: iconName,
             color: Color(colorValue),
           ),
         ),
