@@ -189,11 +189,17 @@ class TramitesService {
         return newObs;
     }
 
-    async addDocumento(id, { nombre_documento, tipo_documento, url }, usuario_id) {
+    async addDocumento(id, { nombre_documento, tipo_documento, url, analisis_ia }, usuario_id) {
         const doc = await this.getById(id, usuario_id);
         if (!doc) throw new Error('Trámite no encontrado o no autorizado');
 
-        const newDoc = { nombre: nombre_documento, tipo: tipo_documento, url, fecha_subida: new Date().toISOString() };
+        const newDoc = { 
+            nombre: nombre_documento, 
+            tipo: tipo_documento, 
+            url, 
+            fecha_subida: new Date().toISOString(),
+            analisis_ia: analisis_ia || null
+        };
         await db.collection('tramites').doc(id).update({
             documentos: admin.firestore.FieldValue.arrayUnion(newDoc)
         });
@@ -218,7 +224,7 @@ class TramitesService {
         return stats;
     }
 
-    async adjuntarDocumento(id, { url, nombre, responsable }, usuario_id) {
+    async adjuntarDocumento(id, { url, nombre, responsable, analisis_ia }, usuario_id) {
         const doc = await this.getById(id, usuario_id);
         if (!doc) throw new Error('Trámite no encontrado o no autorizado');
 
@@ -226,7 +232,8 @@ class TramitesService {
             url,
             nombre: nombre || 'Documento adjunto',
             fecha: new Date().toISOString(),
-            responsable: responsable || 'Usuario'
+            responsable: responsable || 'Usuario',
+            analisis_ia: analisis_ia || null
         };
 
         // Actualizamos el trámite añadiendo el documento a la lista

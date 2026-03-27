@@ -635,6 +635,58 @@ class OpenAIService {
         }
     }
 
+    async analyzeDocument(fileUrl, fileName) {
+        console.log(`🔍 Analizando documento con IA: ${fileName}`);
+        try {
+            const response = await this.client.chat.completions.create({
+                model: process.env.AZURE_OPENAI_DEPLOYMENT_NAME,
+                messages: [
+                    {
+                        role: "system",
+                        content: `Eres un auditor experto en documentos agropecuarios para el sistema Agro Control Pro. 
+                        Analiza la imagen adjunta para un trámite de ganado (Pruebas de Ganado, Movilización o Exportación).
+                        
+                        Debes verificar:
+                        1. Legibilidad: ¿El texto es suficientemente claro para ser leído por un humano?
+                        2. Veracidad aparente: ¿El documento tiene el formato, sellos o estructura de un documento oficial (ej. Certificado de SNIIGA, pruebas sanitarias, guías de tránsito)?
+                        
+                        Responde ÚNICAMENTE en formato JSON plano:
+                        {
+                          "legible": boolean,
+                          "veraz": boolean,
+                          "observaciones": "Breve explicación de 1-2 oraciones en español sobre lo hallado"
+                        }`
+                    },
+                    {
+                        role: "user",
+                        content: [
+                            { type: "text", text: `Analiza este documento: ${fileName}` },
+                            {
+                                type: "image_url",
+                                image_url: {
+                                    url: fileUrl,
+                                },
+                            },
+                        ],
+                    },
+                ],
+                max_tokens: 500,
+                response_format: { type: "json_object" }
+            });
+
+            const result = JSON.parse(response.choices[0].message.content);
+            console.log("✅ Análisis de IA completado:", result);
+            return result;
+        } catch (error) {
+            console.error("❌ Error analizando documento con IA:", error);
+            return {
+                legible: false,
+                veraz: false,
+                observaciones: "No se pudo completar el análisis automático: " + error.message
+            };
+        }
+    }
+
     emitEvent(ws, event, data) {
         const payload = JSON.stringify({ event, ...data });
         // Priorizamos ws.send para asegurar que el cliente de socket reciba el JSON plano

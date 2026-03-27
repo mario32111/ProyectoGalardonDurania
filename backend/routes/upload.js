@@ -3,6 +3,8 @@ const router = express.Router();
 const multer = require('multer');
 const { uploadFile, deleteFileByUrl } = require('../services/firebaseStorageService');
 const tramitesService = require('../services/tramitesService');
+const openAIService = require('../services/openAIService');
+const notificationService = require('../services/notificationService');
 
 // Configuración de multer para almacenar el archivo en memoria
 const storage = multer.memoryStorage();
@@ -15,12 +17,11 @@ const upload = multer({
 
 /**
  * @route POST /upload
- * @desc Sube un archivo a Firebase Storage
- * @access Public/Private dependiendo de tu middleware de autenticación
+ * @desc Sube un archivo a Firebase Storage, lo analiza con IA y notifica al usuario
  */
 router.post('/', upload.single('file'), async (req, res) => {
     try {
-        const userId = req.user.uid; // Obtenido del token
+        const userId = req.user.uid; 
 
         if (!req.file || !req.body.tramite_id) {
             return res.status(400).json({ success: false, message: 'Archivo y tramite_id son obligatorios.' });
@@ -28,27 +29,43 @@ router.post('/', upload.single('file'), async (req, res) => {
 
         const { tramite_id, folder = 'uploads' } = req.body;
 
-        // Llamar al servicio para subir a Firebase Storage
-        // Se podría añadir el userId al folder para mayor aislamiento
+        // 1. Subir a Firebase Storage
         const fileUrl = await uploadFile(req.file, `${userId}/${folder}`);
 
-        // Registrar el documento en el trámite (el servicio ya verifica propiedad con userId)
+        // 2. Análisis con IA (en paralelo o secuencial, aquí secuencial para asegurar datos)
+        const analisisIa = await openAIService.analyzeDocument(fileUrl, req.file.originalname);
+
+        // 3. Registrar el documento en el trámite con los resultados de la IA
         await tramitesService.addDocumento(tramite_id, {
             nombre_documento: req.file.originalname,
             tipo_documento: req.file.mimetype,
-            url: fileUrl
+            url: fileUrl,
+            analisis_ia: analisisIa
         }, userId);
 
-        // Avanzar la etapa del trámite
+        // 4. Avanzar la etapa del trámite
         await tramitesService.avanzarEtapa(tramite_id, {
-            responsable: 'Usuario Autenticado',
-            observaciones: `Documento adjuntado: ${req.file.originalname}`
+            responsable: 'Sistema (IA Analysis)',
+            observaciones: `Documento adjuntado y analizado: ${req.file.originalname}. Resultado IA: ${analisisIa.legible ? 'Legible' : 'Ilegible'}`
         }, userId);
+
+        // 5. Enviar notificación push con el resultado
+        const tipoNotificacion = (analisisIa.legible && analisisIa.veraz) ? 'info' : 'advertencia';
+        const tituloNoti = analisisIa.veraz ? '✅ Documento Recibido' : '⚠️ Observación en Documento';
+        const msgNoti = `El análisis de "${req.file.originalname}" indica: ${analisisIa.observaciones}`;
+
+        await notificationService.sendToUser(userId, {
+            titulo: tituloNoti,
+            mensaje: msgNoti,
+            tipo: tipoNotificacion,
+            data: { tramite_id, screen: 'detalle_tramite' }
+        }).catch(err => console.error('Error enviando notificación post-upload:', err));
 
         res.status(200).json({
             success: true,
-            message: 'Archivo subido y vinculado al trámite exitosamente.',
+            message: 'Archivo subido, analizado y vinculado exitosamente.',
             url: fileUrl,
+            analisis: analisisIa
         });
     } catch (error) {
         console.error('Error en ruta /upload:', error);
