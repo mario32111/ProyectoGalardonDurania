@@ -80,7 +80,18 @@ Historial y contexto de las conversaciones del asistente inteligente de IA.
 - `fecha_inicio` (String ISO Timestamp / ServerTimestamp)
 - `mensajes` (Array of Objects) - Arreglo de mensajes pasados a OpenAI para el contexto (`role`, `content`, `tool_calls`).
 
-### 6. `feedback_chatbot`
+### 8. `monitoreo`
+Almacena el histórico de lecturas de sensores (smart collars/dispositivos).
+- `id` (Document ID)
+- `animal_id` (String) - ID del animal en la colección `ganado`
+- `usuario_id` (String) - ID del usuario dueño
+- `temperatura` (Number)
+- `gps` (Object: `{ lat, lng }`)
+- `acelerometro` (Object: `{ x, y, z }`)
+- `giroscopio` (Object: `{ x, y, z }`)
+- `timestamp` (String ISO Timestamp)
+
+### 9. `feedback_chatbot`
 Retroalimentación del usuario respecto a respuestas de la IA.
 - `id` (Document ID)
 - `fecha` (String ISO Timestamp)

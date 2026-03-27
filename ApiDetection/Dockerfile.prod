@@ -1,0 +1,45 @@
+# =============================================
+# ApiDetection — Dockerfile Producción
+# Python 3.11 + Node.js 20 + YOLO (ultralytics)
+# =============================================
+
+FROM python:3.11-slim
+
+# Instalar Node.js 20 y dependencias del sistema para OpenCV
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    libgl1 \
+    libglib2.0-0 \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y nodejs \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+ENV NODE_ENV=production
+
+# --- Paso 1: Instalar dependencias de Python ---
+# Actualizar pip
+RUN pip install --upgrade pip
+
+# Instalar PyTorch CPU-only (~200MB vs ~2.5GB con CUDA)
+RUN pip install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cpu
+
+# Ultralytics ya no descargará torch porque ya está instalado
+RUN pip install --no-cache-dir ultralytics
+
+# --- Paso 2: Instalar dependencias de Node.js ---
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
+
+# --- Paso 3: Copiar código fuente y modelo ---
+COPY . .
+
+# Crear carpeta de uploads temporal
+RUN mkdir -p uploads
+
+# Puerto por defecto de la API de detección
+EXPOSE 3002
+
+CMD ["npm", "start"]

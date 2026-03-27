@@ -6,10 +6,10 @@ const fs = require('fs');
 class GoogleWalletService {
   constructor() {
     this.credentialsPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
-    
+
     // Resolve path if it's not absolute
-    const fullPath = path.isAbsolute(this.credentialsPath) 
-      ? this.credentialsPath 
+    const fullPath = path.isAbsolute(this.credentialsPath)
+      ? this.credentialsPath
       : path.join(__dirname, '../', this.credentialsPath);
 
     this.auth = new GoogleAuth({
@@ -37,7 +37,7 @@ class GoogleWalletService {
    */
   async createGenericClass(classId, classData) {
     const client = await this.getClient();
-    
+
     // Check if the class already exists
     try {
       const getResponse = await client.request({
@@ -71,7 +71,7 @@ class GoogleWalletService {
    */
   async createGenericObject(objectId, objectData) {
     const client = await this.getClient();
-    
+
     // Check if the object already exists
     try {
       const getResponse = await client.request({

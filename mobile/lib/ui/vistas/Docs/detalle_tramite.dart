@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
 import 'package:firebase_auth/firebase_auth.dart';
+import '../../../config/env_config.dart';
 
 class VistaDetalleTramite extends StatefulWidget {
   final Map<String, dynamic> tramite;
@@ -57,7 +58,7 @@ class _VistaDetalleTramiteState extends State<VistaDetalleTramite> {
       final token = await FirebaseAuth.instance.currentUser?.getIdToken();
       var request = http.MultipartRequest(
         'POST',
-        Uri.parse('http://192.168.15.84:3000/upload'),
+        Uri.parse('${EnvConfig.serverUrl}/upload'),
       );
       request.headers['Authorization'] = 'Bearer $token';
       request.fields['tramite_id'] = widget.tramiteId;

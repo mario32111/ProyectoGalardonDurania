@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../../../config/env_config.dart';
 
 class VistaIdDigital extends StatefulWidget {
   const VistaIdDigital({super.key});
@@ -12,7 +13,7 @@ class VistaIdDigital extends StatefulWidget {
 }
 
 class _VistaIdDigitalState extends State<VistaIdDigital> {
-  static const String _serverUrl = 'http://192.168.15.84:3000';
+  static final String _serverUrl = EnvConfig.serverUrl;
 
   bool _isLoading = true;
   List<dynamic> _credentials = [];
