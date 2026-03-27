@@ -776,7 +776,7 @@ class _AgrobotChatWidgetState extends State<AgrobotChatWidget>
                   Text(
                     _mostrandoHistorial
                         ? "Tus Conversaciones"
-                        : "AgroBot Voice",
+                        : "Cowy",
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 18,

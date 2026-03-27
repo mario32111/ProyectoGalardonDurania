@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart'; // <--- AGREGADO PARA kIsWeb
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart' as fln;
 import 'package:http/http.dart' as http;
@@ -19,52 +20,65 @@ class NotificationService {
   Future<void> initialize() async {
     if (_initialized) return;
 
-    // 1. Solicitar permisos (especialmente en iOS y Android 13+)
-    NotificationSettings settings = await _fcm.requestPermission(
-      alert: true,
-      badge: true,
-      sound: true,
-    );
-
-    if (settings.authorizationStatus == AuthorizationStatus.authorized) {
-      print('🔔 Permisos de notificaciones concedidos');
+    // En la web, las notificaciones fcm requieren configuración adicional (vapidKey, service worker).
+    // Evitamos bloquear el arranque de la app si estamos en el navegador.
+    if (kIsWeb) {
+      print('🌐 Plataforma Web detectada: Saltando inicialización nativa de notificaciones.');
+      _initialized = true;
+      return;
     }
 
-    // 2. Configurar notificaciones locales para Android (Foreground)
-    const fln.AndroidInitializationSettings initializationSettingsAndroid =
-        fln.AndroidInitializationSettings('@mipmap/ic_launcher');
-    
-    const fln.InitializationSettings initializationSettings = fln.InitializationSettings(
-      android: initializationSettingsAndroid,
-    );
+    try {
+      // 1. Solicitar permisos (especialmente en iOS y Android 13+)
+      NotificationSettings settings = await _fcm.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
 
-    await _localNotifications.initialize(
-      initializationSettings,
-      onDidReceiveNotificationResponse: (details) {
-        // Manejar click en la notificación cuando la app está abierta
-        print('Notificación clickeada: ${details.payload}');
-      },
-    );
+      if (settings.authorizationStatus == AuthorizationStatus.authorized) {
+        print('🔔 Permisos de notificaciones concedidos');
+      }
 
-    // 3. Manejar mensajes en primer plano (Foreground)
-    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      print('Mensaje recibido en primer plano: ${message.notification?.title}');
-      _showLocalNotification(message);
-    });
+      // 2. Configurar notificaciones locales para Android (Foreground)
+      const fln.AndroidInitializationSettings initializationSettingsAndroid =
+          fln.AndroidInitializationSettings('@mipmap/ic_launcher');
+      
+      const fln.InitializationSettings initializationSettings = fln.InitializationSettings(
+        android: initializationSettingsAndroid,
+      );
 
-    // 4. Manejar apertura desde notificación (Background/Terminated)
-    FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-      print('App abierta desde notificación: ${message.notification?.title}');
-    });
+      await _localNotifications.initialize(
+        initializationSettings,
+        onDidReceiveNotificationResponse: (details) {
+          print('Notificación clickeada: ${details.payload}');
+        },
+      );
 
-    _initialized = true;
-    
-    // Intentar registrar el token si hay un usuario logueado
-    await registerToken();
+      // 3. Manejar mensajes en primer plano (Foreground)
+      FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+        print('Mensaje recibido en primer plano: ${message.notification?.title}');
+        _showLocalNotification(message);
+      });
+
+      // 4. Manejar apertura desde notificación (Background/Terminated)
+      FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+        print('App abierta desde notificación: ${message.notification?.title}');
+      });
+
+      _initialized = true;
+      
+      // Intentar registrar el token si hay un usuario logueado
+      await registerToken();
+    } catch (e) {
+      print('❌ Error inicializando NotificationService: $e');
+    }
   }
 
   /// Registra el token FCM del dispositivo en el backend.
   Future<void> registerToken() async {
+    if (kIsWeb) return; // Por ahora no registramos tokens en web sin vapidKey
+
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) return;
@@ -96,8 +110,9 @@ class NotificationService {
 
   /// Muestra una notificación local (usado para Foreground).
   void _showLocalNotification(RemoteMessage message) {
+    if (kIsWeb) return;
+
     final notification = message.notification;
-    final android = message.notification?.android;
     final data = message.data;
 
     if (notification != null) {
