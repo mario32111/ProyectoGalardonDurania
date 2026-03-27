@@ -1,0 +1,27 @@
+# =============================================
+# Backend — Dockerfile Producción
+# Node.js 20 Alpine + Express API
+# =============================================
+FROM node:20-alpine
+
+WORKDIR /app
+
+ENV NODE_ENV=production
+
+# Copiar package.json y lock para aprovechar caché de capas
+COPY package.json package-lock.json ./
+
+# Instalar solo dependencias de producción
+RUN npm ci --omit=dev
+
+# Copiar el resto del código fuente
+COPY . .
+
+# Crear carpeta de uploads temporal
+RUN mkdir -p uploads
+
+# Puerto por defecto del backend
+EXPOSE 3000
+
+# Arrancar el servidor
+CMD ["npm", "start"]

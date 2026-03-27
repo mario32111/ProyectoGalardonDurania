@@ -1,0 +1,41 @@
+# =============================================
+# Docker Compose — Entorno de Producción
+# Usa imágenes pre-construidas de Docker Hub
+# =============================================
+# Uso:
+#   docker compose -f docker-compose.prod.yml up -d
+#   docker compose -f docker-compose.prod.yml down
+#
+# Requisitos en el servidor:
+#   - Docker + Docker Compose instalados
+#   - Archivo .env.prod con las variables de entorno
+#   - firebase-service-account.json en el mismo directorio
+#   - google-wallet-credentials.json en el mismo directorio
+# =============================================
+
+services:
+  # ─── Backend Express (API principal) ───────
+  backend:
+    image: marito11/agro-backend:latest
+    container_name: agro-backend
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env.prod
+    restart: always
+    networks:
+      - agro-network
+
+  # ─── API de Detección YOLO ─────────────────
+  api-detection:
+    image: marito11/agro-detection:latest
+    container_name: agro-detection
+    ports:
+      - "3002:3002"
+    restart: always
+    networks:
+      - agro-network
+
+networks:
+  agro-network:
+    driver: bridge

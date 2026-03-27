@@ -30,7 +30,8 @@ const upload = multer({ storage: storage });
 app.use(cors());
 app.use(express.json());
 
-// Servir archivos estáticos si se desea ver la imagen subida (opcional)
+// Servir archivos estáticos (el HTML de prueba y la carpeta uploads)
+app.use(express.static(__dirname));
 app.use('/uploads', express.static(uploadsDir));
 
 app.post('/predict', upload.single('imagen'), (req, res) => {
@@ -43,7 +44,7 @@ app.post('/predict', upload.single('imagen'), (req, res) => {
   console.log(`[+] Imagen recibida: ${req.file.filename}`);
   console.log(`[+] Ruta completa: ${imagePath}`);
   console.log(`[+] Iniciando script de Python...`);
-  
+
   // Ejecutar el script de Python con ruta absoluta
   const scriptPath = path.join(__dirname, 'predict.py');
   const pythonProcess = spawn('python', [scriptPath, imagePath], {
@@ -56,9 +57,9 @@ app.post('/predict', upload.single('imagen'), (req, res) => {
   // Si el proceso de Python no puede ni siquiera iniciar
   pythonProcess.on('error', (err) => {
     console.error('[ERROR] No se pudo iniciar Python:', err.message);
-    return res.status(500).json({ 
-      error: 'No se pudo ejecutar Python. ¿Está instalado y en el PATH?', 
-      detalle: err.message 
+    return res.status(500).json({
+      error: 'No se pudo ejecutar Python. ¿Está instalado y en el PATH?',
+      detalle: err.message
     });
   });
 
@@ -87,9 +88,18 @@ app.post('/predict', upload.single('imagen'), (req, res) => {
     }
 
     try {
-      const jsonResult = JSON.parse(dataString.trim());
-      console.log(`[+] Resultado:`, jsonResult);
+      // Robustecer el parseo: buscar el primer '{' y el último '}' para ignorar advertencias de Ultralytics
+      const jsonStartIndex = dataString.indexOf('{');
+      const jsonEndIndex = dataString.lastIndexOf('}');
       
+      if (jsonStartIndex === -1 || jsonEndIndex === -1) {
+        throw new Error('No se encontró un objeto JSON válido en la salida del modelo');
+      }
+
+      const cleanJsonString = dataString.substring(jsonStartIndex, jsonEndIndex + 1);
+      const jsonResult = JSON.parse(cleanJsonString);
+      console.log(`[+] Resultado extraído:`, jsonResult);
+
       res.json({
         mensaje: 'Inferencia completada exitosamente',
         filename: req.file.filename,
@@ -98,10 +108,10 @@ app.post('/predict', upload.single('imagen'), (req, res) => {
     } catch (e) {
       console.error('[ERROR] No se pudo parsear JSON:', e.message);
       console.error('[ERROR] Salida cruda:', dataString);
-      res.status(500).json({ 
-        error: 'Respuesta inválida del modelo', 
+      res.status(500).json({
+        error: 'Respuesta inválida del modelo',
         salida_cruda: dataString,
-        detalle_error: e.message 
+        detalle_error: e.message
       });
     }
   });

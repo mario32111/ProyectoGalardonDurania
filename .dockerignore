@@ -17,9 +17,8 @@ venv
 __pycache__
 *.pyc
 
-# Variables de entorno (se montan o inyectan)
-.env
-.env.*
+# Variables de entorno
+# (Se incluyen en prod para que el contenedor arranque con todas las credenciales)
 
 # IDE
 .vscode
@@ -40,6 +39,5 @@ mobile/
 # Modelos Whisper (IAService)
 IAService/models_whisper/
 
-# Firebase / credenciales (se montan como volúmenes)
-*-service-account.json
-*-credentials.json
+# Firebase / credenciales — Se incluyen en la imagen de producción
+# (En desarrollo se montan como volúmenes)

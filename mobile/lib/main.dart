@@ -3,7 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart'; // <--- AUTH AGREGADO
 import 'firebase_options.dart';
-import 'ui/vistas/auth/login_vista.dart'; // <--- IMPORTACIÓN DE LOGIN
+import 'services/notification_service.dart';
+import 'ui/vistas/auth/login_vista.dart';
 
 // --- TUS IMPORTACIONES DE VISTAS ---
 import 'ui/vistas/dashboard/dashboard_inicio.dart';
@@ -26,6 +27,8 @@ void main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
   
+  await NotificationService().initialize();
+
   runApp(const AgroControlApp());
 }
 
