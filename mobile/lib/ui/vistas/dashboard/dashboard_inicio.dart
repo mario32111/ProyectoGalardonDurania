@@ -85,39 +85,17 @@ class _VistaDashboardInicioState extends State<VistaDashboardInicio> {
       }
 
       // ==========================================
-      // ALERTAS DE DEMOSTRACIÓN (Solicitadas)
+      // ALERTAS REALES DESDE FIRESTORE (Notificaciones Push)
       // ==========================================
-      alertasReales.add({
-        "titulo": "Reproducción",
-        "mensaje": "5 vacas detectadas en celo (Lote A)",
-        "tipo": "info"
-      });
-      alertasReales.add({
-        "titulo": "Feria de Salud",
-        "mensaje": "Revisión programada: 3 vacas con posible fiebre",
-        "tipo": "critico"
-      });
-      alertasReales.add({
-        "titulo": "Nutrición",
-        "mensaje": "Baja ingesta detectada en el Corral 3",
-        "tipo": "advertencia"
-      });
-
-      // Si no detectamos alertas críticas de inventario reales, mostramos que está bien
-      if (contadorAlertasCriticas == 0) {
-        alertasReales.add({
-          "titulo": "Estado del Inventario",
-          "mensaje": "Todos los insumos se encuentran en niveles óptimos",
-          "tipo": "info"
-        });
-      }
-
+      // Nota: Esto se complementará con el StreamBuilder en el UI
+      // para que sea tiempo real sin necesidad de recargar el dashboard.
+      
       if (mounted) {
         setState(() {
           _totalCabezas = contadorCabezas.toString();
           _ventasMes = "\$${sumaVentas.toStringAsFixed(2).replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},')}";
           _alertasStock = contadorAlertasCriticas.toString();
-          _listaAlertas = alertasReales.take(10).toList(); 
+          // _listaAlertas se manejará vía Stream ahora
           _estaCargando = false;
         });
       }
@@ -148,24 +126,87 @@ class _VistaDashboardInicioState extends State<VistaDashboardInicio> {
               decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2)),
             ),
             Padding(
-              padding: const EdgeInsets.all(25.0),
+              padding: const EdgeInsets.symmetric(horizontal: 25.0, vertical: 15.0),
               child: Row(
                 children: [
                   Icon(Icons.notifications_active_rounded, color: colorTema),
                   const SizedBox(width: 12),
-                  const Text("Centro de Alertas", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                  const Expanded(
+                    child: Text("Centro de Alertas", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                  ),
+                  TextButton.icon(
+                    onPressed: () async {
+                      final user = FirebaseAuth.instance.currentUser;
+                      if (user == null) return;
+                      
+                      final batch = FirebaseFirestore.instance.batch();
+                      final unread = await FirebaseFirestore.instance.collection('notificaciones')
+                          .where('usuario_id', isEqualTo: user.uid)
+                          .where('leido', isEqualTo: false)
+                          .get();
+                      
+                      if (unread.docs.isEmpty) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text("No tienes notificaciones pendientes"), duration: Duration(seconds: 1))
+                        );
+                        return;
+                      }
+
+                      for (var doc in unread.docs) {
+                        batch.update(doc.reference, {'leido': true});
+                      }
+                      await batch.commit();
+                      
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: const Text("✅ Notificaciones marcadas como leídas"), backgroundColor: colorTema)
+                        );
+                      }
+                    },
+                    icon: const Icon(Icons.done_all_rounded, size: 18),
+                    label: const Text("Limpiar"),
+                    style: TextButton.styleFrom(foregroundColor: colorTema),
+                  )
                 ],
               ),
             ),
             const Divider(height: 1),
             Expanded(
-              child: _listaAlertas.isEmpty 
-                ? const Center(child: Text("No hay notificaciones pendientes"))
-                : ListView.builder(
+              child: StreamBuilder<QuerySnapshot>(
+                stream: FirebaseFirestore.instance.collection('notificaciones')
+                    .where('usuario_id', isEqualTo: FirebaseAuth.instance.currentUser?.uid)
+                    .snapshots(),
+                builder: (context, snapshot) {
+                  if (snapshot.hasError) {
+                    print("❌ Error en Notificaciones: ${snapshot.error}");
+                    return Center(child: Text("Error: ${snapshot.error}"));
+                  }
+                  
+                  final docs = snapshot.data?.docs ?? [];
+                  print("🔔 DEBUG: Recibidas ${docs.length} notificaciones de Firestore");
+                  
+                  if (snapshot.connectionState == ConnectionState.waiting && docs.isEmpty) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  
+                  if (docs.isEmpty) {
+                    return const Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.notifications_off_outlined, color: Colors.grey, size: 40),
+                          SizedBox(height: 10),
+                          Text("No tienes notificaciones registradas", style: TextStyle(color: Colors.grey)),
+                        ],
+                      )
+                    );
+                  }
+
+                  return ListView.builder(
                     padding: const EdgeInsets.all(15),
-                    itemCount: _listaAlertas.length,
+                    itemCount: docs.length,
                     itemBuilder: (context, index) {
-                      final alerta = _listaAlertas[index];
+                      final alerta = docs[index].data() as Map<String, dynamic>;
                       Color col;
                       IconData ico;
                       switch(alerta['tipo']) {
@@ -174,22 +215,43 @@ class _VistaDashboardInicioState extends State<VistaDashboardInicio> {
                         case 'info': col = Colors.green; ico = Icons.info_outline; break;
                         default: col = Colors.blue; ico = Icons.notifications_none;
                       }
-                      return Card(
-                        elevation: 0,
-                        margin: const EdgeInsets.only(bottom: 12),
-                        color: col.withOpacity(0.05),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(15),
-                          side: BorderSide(color: col.withOpacity(0.2)),
-                        ),
-                        child: ListTile(
-                          leading: CircleAvatar(backgroundColor: col.withOpacity(0.1), child: Icon(ico, color: col)),
-                          title: Text(alerta['titulo'], style: const TextStyle(fontWeight: FontWeight.bold)),
-                          subtitle: Text(alerta['mensaje']),
+                      bool unread = alerta['leido'] == false;
+                      return Opacity(
+                        opacity: unread ? 1.0 : 0.6,
+                        child: Card(
+                          elevation: 0,
+                          margin: const EdgeInsets.only(bottom: 12),
+                          color: col.withOpacity(unread ? 0.1 : 0.03),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(15),
+                            side: BorderSide(color: col.withOpacity(unread ? 0.3 : 0.1)),
+                          ),
+                          child: ListTile(
+                            leading: CircleAvatar(
+                              backgroundColor: col.withOpacity(unread ? 0.2 : 0.1),
+                              child: Icon(ico, color: col),
+                            ),
+                            title: Text(
+                              alerta['titulo'] ?? 'Sin título', 
+                              style: TextStyle(
+                                fontWeight: unread ? FontWeight.bold : FontWeight.normal,
+                                color: unread ? Colors.black87 : Colors.grey[600],
+                              )
+                            ),
+                            subtitle: Text(
+                              alerta['mensaje'] ?? '',
+                              style: TextStyle(color: unread ? Colors.black54 : Colors.grey[500]),
+                            ),
+                            trailing: unread 
+                              ? Container(width: 8, height: 8, decoration: const BoxDecoration(color: Colors.blue, shape: BoxShape.circle))
+                              : null,
+                          ),
                         ),
                       );
                     },
-                  ),
+                  );
+                }
+              ),
             ),
           ],
         ),
@@ -401,23 +463,32 @@ class _VistaDashboardInicioState extends State<VistaDashboardInicio> {
                         ],
                       ),
                       if (esMovil)
-                        Stack(
-                          children: [
-                            IconButton(
-                              icon: const Icon(Icons.notifications_none_rounded, size: 28, color: Colors.black87),
-                              onPressed: () => _mostrarNotificaciones(context, azulAgro),
-                            ),
-                            if (_listaAlertas.where((a) => a['tipo'] == 'critico').isNotEmpty)
-                              Positioned(
-                                right: 8,
-                                top: 8,
-                                child: Container(
-                                  padding: const EdgeInsets.all(4),
-                                  decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
-                                  constraints: const BoxConstraints(minWidth: 8, minHeight: 8),
+                        StreamBuilder<QuerySnapshot>(
+                          stream: FirebaseFirestore.instance.collection('notificaciones')
+                              .where('usuario_id', isEqualTo: FirebaseAuth.instance.currentUser?.uid)
+                              .where('leido', isEqualTo: false)
+                              .snapshots(),
+                          builder: (context, snapshot) {
+                            bool tienePendientes = (snapshot.data?.docs.isNotEmpty ?? false);
+                            return Stack(
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.notifications_none_rounded, size: 28, color: Colors.black87),
+                                  onPressed: () => _mostrarNotificaciones(context, azulAgro),
                                 ),
-                              )
-                          ],
+                                if (tienePendientes)
+                                  Positioned(
+                                    right: 8,
+                                    top: 8,
+                                    child: Container(
+                                      padding: const EdgeInsets.all(4),
+                                      decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                                      constraints: const BoxConstraints(minWidth: 8, minHeight: 8),
+                                    ),
+                                  )
+                              ],
+                            );
+                          }
                         )
                       else
                         WidgetAnimacionHover(scale: 1.05, child: _widgetClima()),

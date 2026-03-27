@@ -11,6 +11,7 @@ Almacena la información de los usuarios que acceden al sistema.
 - `email` (String)
 - `password` (String)
 - `rol` (String)
+- `fcmTokens` (Array of Strings) - Tokens de dispositivos para notificaciones push
 - `createdAt` (String ISO Timestamp)
 - `updatedAt` (String ISO Timestamp)
 
@@ -96,3 +97,13 @@ Retroalimentación del usuario respecto a respuestas de la IA.
 - `id` (Document ID)
 - `fecha` (String ISO Timestamp)
 - *(Datos dinámicos de feedback enviados por el cliente)*
+
+### 10. `notificaciones`
+Historial de notificaciones enviadas a los usuarios.
+- `id` (Document ID)
+- `usuario_id` (String) - Referencia al usuario destino
+- `titulo` (String)
+- `mensaje` (String)
+- `tipo` (String) - `critico`, `advertencia`, `info`, `general`
+- `leido` (Boolean) - Estado de lectura
+- `fecha` (Timestamp / String ISO)

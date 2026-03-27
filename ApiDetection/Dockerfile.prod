@@ -18,6 +18,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 ENV NODE_ENV=production
+ENV YOLO_CONFIG_DIR=/tmp
 
 # --- Paso 1: Instalar dependencias de Python ---
 # Actualizar pip

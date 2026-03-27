@@ -30,7 +30,8 @@ const upload = multer({ storage: storage });
 app.use(cors());
 app.use(express.json());
 
-// Servir archivos estáticos si se desea ver la imagen subida (opcional)
+// Servir archivos estáticos (el HTML de prueba y la carpeta uploads)
+app.use(express.static(__dirname));
 app.use('/uploads', express.static(uploadsDir));
 
 app.post('/predict', upload.single('imagen'), (req, res) => {
@@ -87,8 +88,17 @@ app.post('/predict', upload.single('imagen'), (req, res) => {
     }
 
     try {
-      const jsonResult = JSON.parse(dataString.trim());
-      console.log(`[+] Resultado:`, jsonResult);
+      // Robustecer el parseo: buscar el primer '{' y el último '}' para ignorar advertencias de Ultralytics
+      const jsonStartIndex = dataString.indexOf('{');
+      const jsonEndIndex = dataString.lastIndexOf('}');
+      
+      if (jsonStartIndex === -1 || jsonEndIndex === -1) {
+        throw new Error('No se encontró un objeto JSON válido en la salida del modelo');
+      }
+
+      const cleanJsonString = dataString.substring(jsonStartIndex, jsonEndIndex + 1);
+      const jsonResult = JSON.parse(cleanJsonString);
+      console.log(`[+] Resultado extraído:`, jsonResult);
 
       res.json({
         mensaje: 'Inferencia completada exitosamente',

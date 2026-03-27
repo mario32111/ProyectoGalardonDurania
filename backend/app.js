@@ -17,6 +17,7 @@ var tramitesRouter = require('./routes/tramites');
 var uploadRouter = require('./routes/upload');
 const walletRouter = require('./routes/wallet');
 var sensoresRouter = require('./routes/sensores');
+var notificationsRouter = require('./routes/notifications');
 
 
 var app = express();
@@ -48,6 +49,7 @@ app.use('/chatbot', verifyToken);
 app.use('/tramites', verifyToken);
 app.use('/upload', verifyToken);
 app.use('/sensores', verifyToken);
+app.use('/notifications', verifyToken);
 // app.use('/wallet', verifyToken); // Removido para acceso directo via navegador similar al microservicio original
 
 
@@ -61,6 +63,7 @@ app.use('/tramites', tramitesRouter);
 app.use('/upload', uploadRouter);
 app.use('/wallet', walletRouter);
 app.use('/sensores', sensoresRouter);
+app.use('/notifications', notificationsRouter);
 
 
 // catch 404 and forward to error handler
@@ -80,6 +83,7 @@ app.use(function (err, req, res, next) {
     req.originalUrl.startsWith('/tramites') ||
     req.originalUrl.startsWith('/upload') ||
     req.originalUrl.startsWith('/sensores') ||
+    req.originalUrl.startsWith('/notifications') ||
     req.originalUrl.startsWith('/users') ||
     req.headers.accept?.includes('application/json')) {
 
