@@ -6,6 +6,8 @@ Bienvenido al repositorio de **Agro Control Pro**, una plataforma integral y mod
 
 ## 🚀 Estructura del Proyecto
 
+![Arquitectura de Agro Control Pro](docs/arquitectura.png)
+
 El sistema está compuesto por tres módulos principales:
 
 1.  **Mobile (`/mobile`)**: Aplicación **Flutter** de alto rendimiento para Android e iOS. Ofrece una experiencia de usuario premium con paneles de control, asistentes de voz y gestión documental.
