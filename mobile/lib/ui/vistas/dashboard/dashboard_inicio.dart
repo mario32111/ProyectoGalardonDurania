@@ -107,6 +107,24 @@ class _VistaDashboardInicioState extends State<VistaDashboardInicio> {
     }
   }
 
+  /// Formatea una fecha ISO 8601 a un texto relativo ("Hace 5 min", "Hace 2h", etc.)
+  String _tiempoRelativo(String? fechaISO) {
+    if (fechaISO == null) return '';
+    try {
+      final fecha = DateTime.parse(fechaISO);
+      final ahora = DateTime.now();
+      final diff = ahora.difference(fecha);
+
+      if (diff.inSeconds < 60) return 'Hace un momento';
+      if (diff.inMinutes < 60) return 'Hace ${diff.inMinutes} min';
+      if (diff.inHours < 24) return 'Hace ${diff.inHours}h';
+      if (diff.inDays < 7) return 'Hace ${diff.inDays}d';
+      return '${fecha.day}/${fecha.month}/${fecha.year}';
+    } catch (_) {
+      return '';
+    }
+  }
+
   void _mostrarNotificaciones(BuildContext context, Color colorTema) {
     showModalBottomSheet(
       context: context,
@@ -126,7 +144,7 @@ class _VistaDashboardInicioState extends State<VistaDashboardInicio> {
               decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2)),
             ),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 25.0, vertical: 15.0),
+              padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 12.0),
               child: Row(
                 children: [
                   Icon(Icons.notifications_active_rounded, color: colorTema),
@@ -134,7 +152,9 @@ class _VistaDashboardInicioState extends State<VistaDashboardInicio> {
                   const Expanded(
                     child: Text("Centro de Alertas", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
                   ),
-                  TextButton.icon(
+                  // Botón: Marcar todas como leídas
+                  IconButton(
+                    tooltip: 'Marcar todas como leídas',
                     onPressed: () async {
                       final user = FirebaseAuth.instance.currentUser;
                       if (user == null) return;
@@ -159,14 +179,54 @@ class _VistaDashboardInicioState extends State<VistaDashboardInicio> {
                       
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: const Text("✅ Notificaciones marcadas como leídas"), backgroundColor: colorTema)
+                          SnackBar(content: const Text("✅ Marcadas como leídas"), backgroundColor: colorTema, duration: const Duration(seconds: 1))
                         );
                       }
                     },
-                    icon: const Icon(Icons.done_all_rounded, size: 18),
-                    label: const Text("Limpiar"),
-                    style: TextButton.styleFrom(foregroundColor: colorTema),
-                  )
+                    icon: Icon(Icons.done_all_rounded, color: colorTema, size: 22),
+                  ),
+                  // Botón: Borrar todas las notificaciones
+                  IconButton(
+                    tooltip: 'Borrar todas',
+                    onPressed: () async {
+                      final confirmar = await showDialog<bool>(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                          title: const Text("¿Borrar todas las notificaciones?"),
+                          content: const Text("Esta acción no puede deshacerse. Se eliminarán todas las alertas de tu historial."),
+                          actions: [
+                            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("Cancelar")),
+                            TextButton(
+                              onPressed: () => Navigator.pop(ctx, true), 
+                              child: const Text("Borrar Todas", style: TextStyle(color: Colors.red)),
+                            ),
+                          ],
+                        ),
+                      );
+                      if (confirmar != true) return;
+
+                      final user = FirebaseAuth.instance.currentUser;
+                      if (user == null) return;
+
+                      final allDocs = await FirebaseFirestore.instance.collection('notificaciones')
+                          .where('usuario_id', isEqualTo: user.uid)
+                          .get();
+                      
+                      final batch = FirebaseFirestore.instance.batch();
+                      for (var doc in allDocs.docs) {
+                        batch.delete(doc.reference);
+                      }
+                      await batch.commit();
+
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text("🗑️ Todas las notificaciones eliminadas"), backgroundColor: Colors.red, duration: Duration(seconds: 2))
+                        );
+                      }
+                    },
+                    icon: const Icon(Icons.delete_sweep_rounded, color: Colors.red, size: 22),
+                  ),
                 ],
               ),
             ),
@@ -175,6 +235,7 @@ class _VistaDashboardInicioState extends State<VistaDashboardInicio> {
               child: StreamBuilder<QuerySnapshot>(
                 stream: FirebaseFirestore.instance.collection('notificaciones')
                     .where('usuario_id', isEqualTo: FirebaseAuth.instance.currentUser?.uid)
+                    .orderBy('fecha', descending: true)
                     .snapshots(),
                 builder: (context, snapshot) {
                   if (snapshot.hasError) {
@@ -183,7 +244,6 @@ class _VistaDashboardInicioState extends State<VistaDashboardInicio> {
                   }
                   
                   final docs = snapshot.data?.docs ?? [];
-                  print("🔔 DEBUG: Recibidas ${docs.length} notificaciones de Firestore");
                   
                   if (snapshot.connectionState == ConnectionState.waiting && docs.isEmpty) {
                     return const Center(child: CircularProgressIndicator());
@@ -206,7 +266,8 @@ class _VistaDashboardInicioState extends State<VistaDashboardInicio> {
                     padding: const EdgeInsets.all(15),
                     itemCount: docs.length,
                     itemBuilder: (context, index) {
-                      final alerta = docs[index].data() as Map<String, dynamic>;
+                      final docSnapshot = docs[index];
+                      final alerta = docSnapshot.data() as Map<String, dynamic>;
                       Color col;
                       IconData ico;
                       switch(alerta['tipo']) {
@@ -216,35 +277,75 @@ class _VistaDashboardInicioState extends State<VistaDashboardInicio> {
                         default: col = Colors.blue; ico = Icons.notifications_none;
                       }
                       bool unread = alerta['leido'] == false;
-                      return Opacity(
-                        opacity: unread ? 1.0 : 0.6,
-                        child: Card(
-                          elevation: 0,
+                      String tiempo = _tiempoRelativo(alerta['fecha']);
+
+                      return Dismissible(
+                        key: Key(docSnapshot.id),
+                        direction: DismissDirection.endToStart,
+                        background: Container(
+                          alignment: Alignment.centerRight,
+                          padding: const EdgeInsets.only(right: 20),
                           margin: const EdgeInsets.only(bottom: 12),
-                          color: col.withOpacity(unread ? 0.1 : 0.03),
-                          shape: RoundedRectangleBorder(
+                          decoration: BoxDecoration(
+                            color: Colors.red.shade50,
                             borderRadius: BorderRadius.circular(15),
-                            side: BorderSide(color: col.withOpacity(unread ? 0.3 : 0.1)),
                           ),
-                          child: ListTile(
-                            leading: CircleAvatar(
-                              backgroundColor: col.withOpacity(unread ? 0.2 : 0.1),
-                              child: Icon(ico, color: col),
+                          child: const Icon(Icons.delete_forever_rounded, color: Colors.red, size: 28),
+                        ),
+                        confirmDismiss: (direction) async {
+                          return true; // Se elimina directamente al deslizar
+                        },
+                        onDismissed: (direction) async {
+                          // Eliminar de Firestore
+                          await FirebaseFirestore.instance.collection('notificaciones').doc(docSnapshot.id).delete();
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text("🗑️ \"${alerta['titulo']}\" eliminada"),
+                              duration: const Duration(seconds: 2),
+                              backgroundColor: Colors.grey[800],
                             ),
-                            title: Text(
-                              alerta['titulo'] ?? 'Sin título', 
-                              style: TextStyle(
-                                fontWeight: unread ? FontWeight.bold : FontWeight.normal,
-                                color: unread ? Colors.black87 : Colors.grey[600],
-                              )
+                          );
+                        },
+                        child: Opacity(
+                          opacity: unread ? 1.0 : 0.6,
+                          child: Card(
+                            elevation: 0,
+                            margin: const EdgeInsets.only(bottom: 12),
+                            color: col.withOpacity(unread ? 0.1 : 0.03),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(15),
+                              side: BorderSide(color: col.withOpacity(unread ? 0.3 : 0.1)),
                             ),
-                            subtitle: Text(
-                              alerta['mensaje'] ?? '',
-                              style: TextStyle(color: unread ? Colors.black54 : Colors.grey[500]),
+                            child: ListTile(
+                              leading: CircleAvatar(
+                                backgroundColor: col.withOpacity(unread ? 0.2 : 0.1),
+                                child: Icon(ico, color: col),
+                              ),
+                              title: Text(
+                                alerta['titulo'] ?? 'Sin título', 
+                                style: TextStyle(
+                                  fontWeight: unread ? FontWeight.bold : FontWeight.normal,
+                                  color: unread ? Colors.black87 : Colors.grey[600],
+                                )
+                              ),
+                              subtitle: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    alerta['mensaje'] ?? '',
+                                    style: TextStyle(color: unread ? Colors.black54 : Colors.grey[500]),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    tiempo,
+                                    style: TextStyle(fontSize: 11, color: Colors.grey[400]),
+                                  ),
+                                ],
+                              ),
+                              trailing: unread 
+                                ? Container(width: 8, height: 8, decoration: const BoxDecoration(color: Colors.blue, shape: BoxShape.circle))
+                                : null,
                             ),
-                            trailing: unread 
-                              ? Container(width: 8, height: 8, decoration: const BoxDecoration(color: Colors.blue, shape: BoxShape.circle))
-                              : null,
                           ),
                         ),
                       );

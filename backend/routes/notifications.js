@@ -101,6 +101,55 @@ router.put('/:id/read', async (req, res, next) => {
   }
 });
 
+// DELETE /notifications/clear-all - Eliminar todas las notificaciones del usuario
+// ⚠️ IMPORTANTE: Esta ruta debe estar ANTES de /:id para que Express no la confunda
+router.delete('/clear-all', async (req, res, next) => {
+  try {
+    const userId = req.user.uid;
+
+    const snapshot = await db.collection('notificaciones')
+      .where('usuario_id', '==', userId)
+      .get();
+
+    if (snapshot.empty) {
+      return res.status(200).json({ success: true, message: 'No hay notificaciones para eliminar' });
+    }
+
+    const batch = db.batch();
+    snapshot.docs.forEach(doc => batch.delete(doc.ref));
+    await batch.commit();
+
+    res.status(200).json({ success: true, message: `${snapshot.size} notificaciones eliminadas` });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// DELETE /notifications/:id - Eliminar una notificación individual
+router.delete('/:id', async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user.uid;
+
+    const docRef = db.collection('notificaciones').doc(id);
+    const doc = await docRef.get();
+
+    if (!doc.exists) {
+      return res.status(404).json({ success: false, message: 'Notificación no encontrada' });
+    }
+
+    if (doc.data().usuario_id !== userId) {
+      return res.status(403).json({ success: false, message: 'No tienes permiso' });
+    }
+
+    await docRef.delete();
+
+    res.status(200).json({ success: true, message: 'Notificación eliminada' });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // POST /notifications/test-send - Enviar una notificación de prueba al usuario actual
 router.post('/test-send', async (req, res, next) => {
   try {
