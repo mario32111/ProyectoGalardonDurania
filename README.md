@@ -26,6 +26,7 @@ El sistema está compuesto por tres módulos principales:
 ### 👁️ Visión Artificial y Documentación
 -   **Verificación de Documentos**: Análisis automático de legibilidad y autenticidad de documentos mediante **Azure OpenAI (GPT-4o Vision)**.
 -   **Detección de Ganado**: Identifica cuántas vacas hay en una imagen y clasifica su postura (parada o echada) mediante el servicio `ApiDetection`.
+-   **Entrenamiento del Modelo** (`ApiDetection/TrainModel.ipynb`): Notebook de Google Colab utilizado para entrenar el modelo **YOLO11n** con el dataset [MMCows (Kaggle)](https://www.kaggle.com/datasets/hienvuvg/mmcows). Entrenado durante 50 épocas sobre ~5,040 imágenes con 2 clases (`standing`, `lying`), alcanzando un **mAP50 de 99.4%** y **mAP50-95 de 90.6%**.
 
 ### 📱 Identidad Digital y Notificaciones
 -   **Google Wallet**: Integración nativa para portar credenciales de productor, certificados de sanidad y documentos oficiales de manera digital.
