@@ -1,6 +1,6 @@
 class EnvConfig {
   /// Cambiar a true para producción, false para desarrollo.
-  static const bool isProduction = false;
+  static const bool isProduction = true;
 
   /// URL del servidor en producción (Azure).
   static const String prodUrl = 'https://backend-main.politepebble-de41f15a.westus.azurecontainerapps.io';
