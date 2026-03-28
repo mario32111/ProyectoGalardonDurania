@@ -151,6 +151,23 @@ const tools = [
     {
         type: "function",
         function: {
+            name: "consultarHistorialAnimal",
+            description: "Consulta el historial integral de un animal específico por su arete SINIIGA, incluyendo reportes de salud, eventos críticos (vacunaciones, movilizaciones) y la última telemetría IoT (temperatura, GPS, actividad).",
+            parameters: {
+                type: "object",
+                properties: {
+                    arete_siniiga: {
+                        type: "string",
+                        description: "El arete SINIIGA del animal (ej: MX-123456)."
+                    }
+                },
+                required: ["arete_siniiga"]
+            }
+        }
+    },
+    {
+        type: "function",
+        function: {
             name: "consultarInventario",
             description: "Consulta el inventario de insumos/alimentos del usuario. Puede filtrar solo los que tienen stock bajo. Usa esta herramienta cuando el usuario pregunte qué insumos tiene, si le falta algo, stock, medicamentos, alimentos, etc.",
             parameters: {
@@ -273,6 +290,7 @@ class OpenAIService {
                 - **Consultar el inventario** de insumos (incluyendo alertas de stock bajo).
                 - **Consultar compras de lotes** de ganado realizadas.
                 - **Consultar ventas y salidas** de ganado registradas.
+                - **Consultar Historial/Telemetría** clínica y eventos críticos (enfermedades, vacunas, sensores IoT) de un arete específico.
 
                 ### 🔑 AUTO-DETECCIÓN DE UPP (CRÍTICO)
                 - **SIEMPRE** que necesites la UPP del usuario (para crear trámites, consultar estatus sanitario, buscar trámites por filtros, etc.), primero ejecuta la herramienta \`obtenerUppsUsuario\` para obtener sus UPPs registradas.
@@ -558,6 +576,43 @@ class OpenAIService {
                         total: ganado.length,
                         registros: ganado.slice(0, 20),
                         mensaje: ganado.length > 20 ? `Mostrando 20 de ${ganado.length} registros.` : undefined
+                    };
+                }
+
+                case "consultarHistorialAnimal": {
+                    const arete = args.arete_siniiga;
+                    if (!arete) return { error: "El arete SINIIGA es obligatorio para esta consulta." };
+
+                    const snapGanado = await db.collection('ganado')
+                        .where('usuario_id', '==', usuario_id)
+                        .where('arete_siniiga', '==', arete)
+                        .limit(1)
+                        .get();
+                        
+                    if (snapGanado.empty) return { error: "No se encontró ningún animal registrado con ese arete." };
+                    
+                    const animalId = snapGanado.docs[0].id;
+                    const dataAnimal = snapGanado.docs[0].data();
+
+                    const snapSalud = await db.collection('reportes_salud').where('usuario_id', '==', usuario_id).where('arete_siniiga', '==', arete).limit(5).get();
+                    const snapEventos = await db.collection('eventos_criticos').where('usuario_id', '==', usuario_id).where('arete_siniiga', '==', arete).limit(5).get();
+                    
+                    // Tratamos de buscar la telemetría por ID
+                    const snapMonitoreo = await db.collection('monitoreo').where('usuario_id', '==', usuario_id).where('animal_id', '==', animalId).limit(5).get();
+
+                    let telemetriaArray = snapMonitoreo.docs.map(d => d.data());
+                    telemetriaArray.sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+                    return {
+                        informacion_base: {
+                            raza: dataAnimal.raza,
+                            peso_kg: dataAnimal.peso_kg,
+                            estado_reproductivo: dataAnimal.estado_reproductivo,
+                            proposito: dataAnimal.proposito
+                        },
+                        reporteos_enfermedades: snapSalud.docs.map(d => d.data()),
+                        eventos_criticos_vacunas: snapEventos.docs.map(d => d.data()),
+                        lecturas_iot_recientes: telemetriaArray.slice(0, 3) 
                     };
                 }
 

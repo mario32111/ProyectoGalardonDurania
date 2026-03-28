@@ -170,7 +170,9 @@ class _AgrobotChatWidgetState extends State<AgrobotChatWidget>
       _mostrandoHistorial = false;
       _mensajes.clear();
       for (var m in mensajesRaw) {
-        if (m['role'] == 'system') continue;
+        if (m['role'] == 'system' || m['role'] == 'tool') continue;
+        if (m['role'] == 'assistant' && (m['content'] == null || m['content'].toString().trim().isEmpty)) continue;
+        
         _mensajes.add(
           ChatMessage(
             emisor: m['role'] == 'user' ? 'user' : 'bot',
