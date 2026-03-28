@@ -101,36 +101,97 @@ router.get('/ganado/lotes', async (req, res, next) => {
   try {
     const userId = req.user.uid;
 
+    const { upp } = req.query;
+
     // Obtener Compras
-    const comprasSnapshot = await db.collection('compras_lotes')
-      .where('usuario_id', '==', userId)
-      .get();
+    let comprasQuery = db.collection('compras_lotes').where('usuario_id', '==', userId);
+    if (upp) comprasQuery = comprasQuery.where('upp_destino', '==', upp);
+    const comprasSnapshot = await comprasQuery.get();
     
     let compras = comprasSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     compras.sort((a, b) => (b.fecha_registro_sistema?._seconds || 0) - (a.fecha_registro_sistema?._seconds || 0));
 
     // Obtener Ventas
-    const ventasSnapshot = await db.collection('ventas_salidas')
-      .where('usuario_id', '==', userId)
-      .get();
+    let ventasQuery = db.collection('ventas_salidas').where('usuario_id', '==', userId);
+    if (upp) ventasQuery = ventasQuery.where('upp_origen', '==', upp);
+    const ventasSnapshot = await ventasQuery.get();
     
     let ventas = ventasSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     ventas.sort((a, b) => (b.fecha_registro_sistema?._seconds || 0) - (a.fecha_registro_sistema?._seconds || 0));
 
-    // Calcular totales
-    let totalCabezasCompradas = 0;
-    let montoTotalInvertido = 0;
-    compras.forEach(c => {
-      totalCabezasCompradas += (c.cantidad_cabezas || 0);
-      montoTotalInvertido += (c.total_pagado || 0);
-    });
+    // Calcular totales financieros
+    let totalCabezasCompradas = 0; let montoTotalInvertido = 0;
+    compras.forEach(c => { totalCabezasCompradas += (c.cantidad_cabezas || 0); montoTotalInvertido += (c.total_pagado || 0); });
 
-    let totalCabezasVendidas = 0;
-    let montoTotalVendido = 0;
-    ventas.forEach(v => {
-      totalCabezasVendidas += (v.cantidad_cabezas || 0);
-      montoTotalVendido += (v.monto_total || 0);
-    });
+    let totalCabezasVendidas = 0; let montoTotalVendido = 0;
+    ventas.forEach(v => { totalCabezasVendidas += (v.cantidad_cabezas || 0); montoTotalVendido += (v.monto_total || 0); });
+
+    // REPORTE DE SALUD GENERAL POR UPP (Si se requiere)
+    let resumenSalud = null;
+    let resumenTrazabilidad = null;
+    let listadoSaludResumida = [];
+    let listadoEventosResumidos = [];
+    if (upp) {
+      // 1. Conseguir todos los aretes de esa UPP
+      const ganadoSnapshot = await db.collection('ganado')
+        .where('usuario_id', '==', userId)
+        .where('upp', '==', upp).get();
+        
+      const aretesMap = {};
+      ganadoSnapshot.docs.forEach(d => {
+        const data = d.data();
+        if(data.arete_siniiga) aretesMap[data.arete_siniiga] = data;
+      });
+      const aretesLista = Object.keys(aretesMap);
+
+      if (aretesLista.length > 0) {
+        // 2. Traer TODO el historial de salud del usuario y filtrar
+        const saludSnapshot = await db.collection('reportes_salud').where('usuario_id', '==', userId).get();
+        const reportesValidos = saludSnapshot.docs.map(d => d.data()).filter(d => aretesLista.includes(d.arete_siniiga));
+
+        const vacasEnfermas = new Set(reportesValidos.map(r => r.arete_siniiga)).size;
+        
+        // 3. Agrupar conteo de síntomas
+        const conteoSintomas = {};
+        reportesValidos.forEach(r => {
+          const sint = r.descripcion_sintomas || 'No especificado';
+          conteoSintomas[sint] = (conteoSintomas[sint] || 0) + 1;
+        });
+
+        resumenSalud = {
+          total_vacas_upp: aretesLista.length,
+          vacas_con_historial_enfermo: vacasEnfermas,
+          porcentaje_enfermas: aretesLista.length > 0 ? ((vacasEnfermas / aretesLista.length) * 100).toFixed(1) + '%' : '0%',
+          desglose_enfermedades: conteoSintomas
+        };
+        listadoSaludResumida = reportesValidos;
+
+        // 4. Módulo de Trazabilidad
+        const eventosSnapshot = await db.collection('eventos_criticos').where('usuario_id', '==', userId).get();
+        const eventosValidos = eventosSnapshot.docs.map(d => d.data()).filter(e => aretesLista.includes(e.arete_siniiga));
+
+        const conteoEventos = {};
+        let ultimosRastreos = []; // Para mostrar las últimas 5 intervenciones
+        
+        eventosValidos.sort((a,b) => (b.fecha_registro?._seconds || 0) - (a.fecha_registro?._seconds || 0));
+        
+        eventosValidos.forEach(e => {
+          const tipo = e.tipo_evento || 'Otro';
+          conteoEventos[tipo] = (conteoEventos[tipo] || 0) + 1;
+        });
+
+        resumenTrazabilidad = {
+          total_eventos_historicos: eventosValidos.length,
+          desglose_tipos: conteoEventos,
+          ultimas_5_intervenciones: eventosValidos.slice(0, 5)
+        };
+        listadoEventosResumidos = eventosValidos;
+
+      } else {
+        resumenSalud = { total_vacas_upp: 0, vacas_con_historial_enfermo: 0, porcentaje_enfermas: '0%', desglose_enfermedades: {} };
+        resumenTrazabilidad = { total_eventos_historicos: 0, desglose_tipos: {}, ultimas_5_intervenciones: [] };
+      }
+    }
 
     res.status(200).json({
       success: true,
@@ -138,10 +199,14 @@ router.get('/ganado/lotes', async (req, res, next) => {
         resumen: {
           compras: { cabezas: totalCabezasCompradas, monto: montoTotalInvertido },
           ventas: { cabezas: totalCabezasVendidas, monto: montoTotalVendido },
-          balance: montoTotalVendido - montoTotalInvertido
+          balance: montoTotalVendido - montoTotalInvertido,
+          salud: resumenSalud,
+          trazabilidad: resumenTrazabilidad // Nuevo modulo en UPP
         },
         compras_detalle: compras,
-        ventas_detalle: ventas
+        ventas_detalle: ventas,
+        salud_detalle: listadoSaludResumida,
+        trazabilidad_detalle: listadoEventosResumidos
       }
     });
 

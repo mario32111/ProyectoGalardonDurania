@@ -35,14 +35,18 @@ class ReportesService {
     }
   }
 
-  /// Obtiene el reporte agregado de compras y ventas de lotes
-  Future<Map<String, dynamic>?> obtenerReporteLotes() async {
+  /// Obtiene el reporte agregado de compras, ventas y salud
+  Future<Map<String, dynamic>?> obtenerReporteLotes({String? upp}) async {
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) return null;
 
       final token = await user.getIdToken();
-      final url = Uri.parse('${EnvConfig.serverUrl}/reportes/ganado/lotes');
+      String uriStr = '${EnvConfig.serverUrl}/reportes/ganado/lotes';
+      if (upp != null && upp.isNotEmpty) {
+        uriStr += '?upp=$upp';
+      }
+      final url = Uri.parse(uriStr);
       
       final response = await http.get(url, headers: {
         'Authorization': 'Bearer $token',

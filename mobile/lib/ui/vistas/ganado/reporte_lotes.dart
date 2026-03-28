@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../../services/reportes_service.dart';
 import '../../../services/export_service.dart';
 
@@ -16,15 +18,68 @@ class _VistaReporteLotesState extends State<VistaReporteLotes> {
   Map<String, dynamic>? _resumen;
   List _compras = [];
   List _ventas = [];
+  
+  List<String> _upps = [];
+  String? _selectedUpp;
 
   @override
   void initState() {
     super.initState();
-    _cargarReporte();
+    _cargarUpps().then((_) => _cargarReporte());
+  }
+
+  Future<void> _cargarUpps() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    try {
+      // Buscar UPPs en varias colecciones al mismo tiempo para no omitir ninguna
+      final futures = await Future.wait([
+        FirebaseFirestore.instance.collection('ganado').where('usuario_id', isEqualTo: user.uid).get(),
+        FirebaseFirestore.instance.collection('compras_lotes').where('usuario_id', isEqualTo: user.uid).get(),
+        FirebaseFirestore.instance.collection('ventas_salidas').where('usuario_id', isEqualTo: user.uid).get(),
+        FirebaseFirestore.instance.collection('zonas_mapa').where('usuario_id', isEqualTo: user.uid).get(),
+      ]);
+
+      final Set<String> uppsSet = {};
+
+      // Extraer de ganado
+      for (var d in futures[0].docs) {
+        final upp = d.data()['upp']?.toString();
+        if (upp != null && upp.trim().isNotEmpty) uppsSet.add(upp.trim());
+      }
+      
+      // Extraer de compras_lotes
+      for (var d in futures[1].docs) {
+        final upp = d.data()['upp_destino']?.toString();
+        if (upp != null && upp.trim().isNotEmpty) uppsSet.add(upp.trim());
+      }
+
+      // Extraer de ventas_salidas
+      for (var d in futures[2].docs) {
+        final upp = d.data()['upp_origen']?.toString();
+        if (upp != null && upp.trim().isNotEmpty) uppsSet.add(upp.trim());
+      }
+
+      // Extraer de zonas_mapa
+      for (var d in futures[3].docs) {
+        final upp = d.data()['upp']?.toString();
+        if (upp != null && upp.trim().isNotEmpty) uppsSet.add(upp.trim());
+      }
+          
+      if (mounted) {
+        setState(() {
+           _upps = uppsSet.toList();
+           _upps.sort();
+        });
+      }
+    } catch (e) {
+      debugPrint("Error upps $e");
+    }
   }
 
   Future<void> _cargarReporte() async {
-    final resp = await ReportesService().obtenerReporteLotes();
+    setState(() => _isLoading = true);
+    final resp = await ReportesService().obtenerReporteLotes(upp: _selectedUpp);
     
     if (resp != null && mounted) {
       setState(() {
@@ -96,6 +151,152 @@ class _VistaReporteLotesState extends State<VistaReporteLotes> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Filtro de UPP
+          if (_upps.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 20),
+              child: Card(
+                elevation: 2,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 5),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      isExpanded: true,
+                      value: _selectedUpp,
+                      hint: const Text("Filtro global: Todas las UPPs"),
+                      items: [
+                        const DropdownMenuItem(value: null, child: Text("Todas las UPPs")),
+                        ..._upps.map((u) => DropdownMenuItem(value: u, child: Text("UPP: $u")))
+                      ],
+                      onChanged: (val) {
+                        setState(() => _selectedUpp = val);
+                        _cargarReporte();
+                      },
+                    ),
+                  ),
+                ),
+              ),
+            ),
+
+          // SECCION SALUD (SOLO SI HAY UNA UPP SELECCIONADA)
+          if (_selectedUpp != null && _resumen!['salud'] != null) ...[
+            Card(
+              elevation: 4,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.health_and_safety, color: Colors.teal, size: 30),
+                        const SizedBox(width: 15),
+                        Text("Metría Clínica de Granja", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.teal.shade800)),
+                      ],
+                    ),
+                    const Divider(height: 30),
+                    _infoRow("Vacas registradas (UPP)", _resumen!['salud']['total_vacas_upp']?.toString() ?? '0', Colors.black87),
+                    _infoRow("Casos clínicos", _resumen!['salud']['vacas_con_historial_enfermo']?.toString() ?? '0', Colors.orange),
+                    _infoRow("Porcentaje de afección", _resumen!['salud']['porcentaje_enfermas']?.toString() ?? '0%', Colors.red),
+                    
+                    if ((_resumen!['salud']['desglose_enfermedades'] as Map).isNotEmpty) ...[
+                      const SizedBox(height: 15),
+                      const Text("Distribución de patologías históricas:", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey)),
+                      const SizedBox(height: 5),
+                      ...(_resumen!['salud']['desglose_enfermedades'] as Map).entries.map((e) => 
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.circle, size: 8, color: Colors.orange),
+                              const SizedBox(width: 8),
+                              Expanded(child: Text("${e.key}", style: const TextStyle(fontSize: 12))),
+                              Text("${e.value} casos", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                            ],
+                          ),
+                        )
+                      ).toList()
+                    ]
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 30),
+          ],
+
+          // SECCION TRAZABILIDAD (SOLO SI HAY UNA UPP SELECCIONADA)
+          if (_selectedUpp != null && _resumen!['trazabilidad'] != null) ...[
+            Card(
+              elevation: 4,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.timeline, color: azulAgro, size: 30),
+                        const SizedBox(width: 15),
+                        Text("Trazabilidad (Eventos Críticos)", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: azulAgro)),
+                      ],
+                    ),
+                    const Divider(height: 30),
+                    _infoRow("Total intervenciones históricas", _resumen!['trazabilidad']['total_eventos_historicos']?.toString() ?? '0', Colors.black87),
+                    
+                    if ((_resumen!['trazabilidad']['desglose_tipos'] as Map).isNotEmpty) ...[
+                      const SizedBox(height: 15),
+                      const Text("Distribución por tipo de evento:", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey)),
+                      const SizedBox(height: 5),
+                      ...(_resumen!['trazabilidad']['desglose_tipos'] as Map).entries.map((e) => 
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.check_circle_outline, size: 12, color: Colors.blueAccent),
+                              const SizedBox(width: 8),
+                              Expanded(child: Text("${e.key}", style: const TextStyle(fontSize: 12))),
+                              Text("${e.value} registros", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                            ],
+                          ),
+                        )
+                      ).toList()
+                    ],
+
+                    if ((_resumen!['trazabilidad']['ultimas_5_intervenciones'] as List).isNotEmpty) ...[
+                      const SizedBox(height: 20),
+                      const Text("Últimos registros relevantes (Top 5):", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey)),
+                      const SizedBox(height: 10),
+                      ...(_resumen!['trazabilidad']['ultimas_5_intervenciones'] as List).map((e) => 
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 6),
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(color: Colors.grey.shade50, borderRadius: BorderRadius.circular(8)),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Icon(Icons.arrow_right_alt, size: 16, color: Colors.grey),
+                              const SizedBox(width: 5),
+                              Expanded(
+                                child: Text(
+                                  "[${e['arete_siniiga']}] ${e['tipo_evento']}: ${e['descripcion']}",
+                                  style: const TextStyle(fontSize: 11),
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      ).toList()
+                    ]
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 30),
+          ],
+
           // Tarjeta de Resumen Financiero
           Card(
             elevation: 4,

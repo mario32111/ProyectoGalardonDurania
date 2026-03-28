@@ -136,6 +136,10 @@ class _VistaDetalleTramiteState extends State<VistaDetalleTramite> {
                 ),
                 const SizedBox(height: 10),
                 _buildDocumentosVisuales(),
+                const SizedBox(height: 25),
+                _buildSectionTitle("Historial de Alertas de Documentos"),
+                const SizedBox(height: 10),
+                _buildHistorialAlertas(),
                 const SizedBox(height: 50),
               ],
             ),
@@ -532,45 +536,87 @@ class _VistaDetalleTramiteState extends State<VistaDetalleTramite> {
   }
 
   Widget _buildObservacionesList() {
-    List<dynamic> obs = _tramiteActual['observaciones_list'] ?? [];
-    if (obs.isEmpty) return _emptyCard("No hay comentarios.");
+    List<dynamic> historial = _tramiteActual['historial'] ?? [];
+    
+    // Filtrar solo los pasos del historial que tienen el campo "observaciones" con texto útil
+    List<dynamic> obs = historial.where((h) {
+      final texto = h['observaciones'];
+      return texto != null && texto.toString().trim().isNotEmpty;
+    }).toList();
+
+    if (obs.isEmpty) return _emptyCard("Sin observaciones del backend.");
+    
     return Column(
-      children: obs
-          .map(
-            (o) => Container(
-              margin: const EdgeInsets.only(bottom: 8),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
+      children: obs.map((o) {
+        return Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.blue.shade100, width: 1),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.blue.withOpacity(0.05),
+                blurRadius: 5,
+                offset: const Offset(0, 2),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        o['autor'] ?? 'Sistema',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: Colors.blueGrey,
-                          fontSize: 12,
-                        ),
+                  Expanded(
+                    child: Text(
+                      o['responsable'] ?? o['autor'] ?? 'Sistema / Admin',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blueGrey,
+                        fontSize: 12,
                       ),
-                      Text(
-                        _formatearFecha(o['fecha']),
-                        style: const TextStyle(color: Colors.grey, fontSize: 9),
-                      ),
-                    ],
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
-                  const SizedBox(height: 4),
-                  Text(o['texto'] ?? '', style: const TextStyle(fontSize: 13)),
+                  Text(
+                    _formatearFecha(o['fecha_inicio'] ?? o['fecha']),
+                    style: const TextStyle(color: Colors.grey, fontSize: 9),
+                  ),
                 ],
               ),
-            ),
-          )
-          .toList(),
+              const SizedBox(height: 6),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.grey.shade200),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.format_quote_rounded, color: Colors.blue.shade300, size: 16),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        o['observaciones'].toString(),
+                        style: const TextStyle(fontSize: 13, height: 1.3),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                "Etapa: ${o['nombre'] ?? 'Desconocida'}",
+                style: const TextStyle(fontSize: 10, color: Colors.grey, fontStyle: FontStyle.italic),
+              ),
+            ],
+          ),
+        );
+      }).toList(),
     );
   }
 
@@ -636,6 +682,70 @@ class _VistaDetalleTramiteState extends State<VistaDetalleTramite> {
           );
         }),
       ),
+    );
+  }
+
+  Widget _buildHistorialAlertas() {
+    List<dynamic> docs = _tramiteActual['documentos'] ?? [];
+    List<dynamic> alertas = docs.where((doc) => doc['analisis_ia'] != null).toList();
+
+    if (alertas.isEmpty) return _emptyCard("Sin registro de análisis de IA en los documentos.");
+
+    return Column(
+      children: alertas.map((doc) {
+        final ia = doc['analisis_ia'];
+        final esValido = ia['veraz'] == true && ia['legible'] == true;
+        
+        return Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: esValido ? Colors.green.withOpacity(0.05) : Colors.orange.withOpacity(0.05),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: esValido ? Colors.green.shade200 : Colors.orange.shade200, width: 1),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                esValido ? Icons.verified_user : Icons.warning_amber_rounded,
+                color: esValido ? Colors.green : Colors.orange,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      "Documento: ${doc['nombre'] ?? doc['nombre_documento'] ?? 'Archivo'}",
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      ia['observaciones'] ?? "Revisión automática completada.",
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade800,
+                        height: 1.3,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Text("Legible: ", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey.shade600)),
+                        Icon(ia['legible'] == true ? Icons.check : Icons.close, size: 12, color: ia['legible'] == true ? Colors.green : Colors.red),
+                        const SizedBox(width: 8),
+                        Text("Veraz: ", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey.shade600)),
+                        Icon(ia['veraz'] == true ? Icons.check : Icons.close, size: 12, color: ia['veraz'] == true ? Colors.green : Colors.red),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      }).toList(),
     );
   }
 
