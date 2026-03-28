@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart'; // <--- AGREGADO PARA UID
+import 'historial_individual.dart';
 
 class VistaManejoGanado extends StatefulWidget {
   const VistaManejoGanado({super.key});
@@ -69,12 +70,7 @@ class _VistaManejoGanadoState extends State<VistaManejoGanado> {
       return;
     }
 
-    if (_uppSeleccionada == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Debes seleccionar una UPP válida del mapa', style: TextStyle(color: Colors.white)), backgroundColor: Colors.orange),
-      );
-      return;
-    }
+    String uppGuardar = _uppSeleccionada ?? 'Sin UPP asignada';
 
     // Activamos la ruedita de carga y bloqueamos el botón
     setState(() {
@@ -87,7 +83,7 @@ class _VistaManejoGanadoState extends State<VistaManejoGanado> {
       
       await FirebaseFirestore.instance.collection('ganado').add({
         'usuario_id': user?.uid ?? 'anonimo', // Asociar al usuario actual
-        'upp': _uppSeleccionada,   // <--- USAR UPP SELECCIONADA
+        'upp': uppGuardar,   // <--- USAR UPP SELECCIONADA O FALLBACK
         'arete_siniiga': _siniigaController.text.trim(),
         'arete_interno': _internoController.text.trim(),
         // Convertimos el peso y temp a números, si está vacío guardamos 0.0
@@ -144,25 +140,32 @@ class _VistaManejoGanadoState extends State<VistaManejoGanado> {
               const SizedBox(height: 15),
               
               // --- NUEVO: SELECTOR DE UPPS DESDE EL MAPA ---
-              _cargandoUpps 
-                ? const LinearProgressIndicator() 
-                : DropdownButtonFormField<String>(
-                    value: _uppSeleccionada,
-                    hint: const Text("Seleccionar UPP de ubicación"),
-                    isExpanded: true,
-                    decoration: InputDecoration(
-                      labelText: "Coto / Zona (UPP)",
-                      prefixIcon: const Icon(Icons.pin, color: Colors.grey),
-                      filled: true, fillColor: const Color(0xFFF8FAFC),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
-                    ),
-                    items: _uppsDisponibles.map((upp) => DropdownMenuItem(value: upp, child: Text(upp))).toList(),
-                    onChanged: (val) => setState(() => _uppSeleccionada = val),
+              if (_cargandoUpps) 
+                const LinearProgressIndicator()
+              else if (_uppsDisponibles.isEmpty)
+                TextField(
+                  enabled: false,
+                  decoration: InputDecoration(
+                    labelText: "Coto / Zona (UPP)",
+                    hintText: "Sin zonas registradas en el mapa",
+                    prefixIcon: const Icon(Icons.pin, color: Colors.grey),
+                    filled: true, fillColor: Colors.red[50],
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
                   ),
-              if (!_cargandoUpps && _uppsDisponibles.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.all(8.0),
-                  child: Text("! Registra primero tus zonas en el Mapa !", style: TextStyle(color: Colors.red, fontSize: 11, fontWeight: FontWeight.bold)),
+                )
+              else 
+                DropdownButtonFormField<String>(
+                  value: _uppSeleccionada,
+                  hint: const Text("Seleccionar UPP de ubicación"),
+                  isExpanded: true,
+                  decoration: InputDecoration(
+                    labelText: "Coto / Zona (UPP)",
+                    prefixIcon: const Icon(Icons.pin, color: Colors.grey),
+                    filled: true, fillColor: const Color(0xFFF8FAFC),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                  ),
+                  items: _uppsDisponibles.map((upp) => DropdownMenuItem(value: upp, child: Text(upp))).toList(),
+                  onChanged: (val) => setState(() => _uppSeleccionada = val),
                 ),
 
               const SizedBox(height: 15),
@@ -188,6 +191,22 @@ class _VistaManejoGanadoState extends State<VistaManejoGanado> {
               width: double.infinity,
               height: 55,
               child: _botonGuardar(azulAgro),
+            ),
+            const SizedBox(height: 15),
+            SizedBox(
+              width: double.infinity,
+              height: 55,
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  Navigator.push(context, MaterialPageRoute(builder: (context) => const VistaHistorialIndividual()));
+                },
+                icon: Icon(Icons.history_edu, color: azulAgro),
+                label: Text("VER HISTORIAL DE ANIMAL", style: TextStyle(color: azulAgro, fontWeight: FontWeight.bold, fontSize: 16)),
+                style: OutlinedButton.styleFrom(
+                  side: BorderSide(color: azulAgro, width: 2),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
             ),
           ],
         ),

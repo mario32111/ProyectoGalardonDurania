@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart'; // <--- AGREGADO PARA UID
+import 'reporte_lotes.dart';
 
 class VistaSalidaVenta extends StatefulWidget {
   const VistaSalidaVenta({super.key});
@@ -107,12 +108,7 @@ class _VistaSalidaVentaState extends State<VistaSalidaVenta> {
       return;
     }
 
-    if (_uppSeleccionada == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Debes seleccionar la UPP de origen desde el mapa'), backgroundColor: Colors.orange),
-      );
-      return;
-    }
+    String uppGuardar = _uppSeleccionada ?? 'Sin UPP asignada';
 
     setState(() {
       _estaGuardando = true; // Empieza a girar la ruedita
@@ -123,7 +119,7 @@ class _VistaSalidaVentaState extends State<VistaSalidaVenta> {
 
       await FirebaseFirestore.instance.collection('ventas_salidas').add({
         'usuario_id': user?.uid ?? 'anonimo', // Asociar al usuario actual
-        'upp_origen': _uppSeleccionada, // <--- USAR UPP SELECCIONADA
+        'upp_origen': uppGuardar, // <--- USAR UPP SELECCIONADA O FALLBACK
         'cliente': _clienteController.text.trim(),
         'destino': _destinoController.text.trim(),
         'fecha_salida': _fechaController.text.trim().isEmpty ? 'Sin fecha' : _fechaController.text.trim(),
@@ -209,25 +205,32 @@ class _VistaSalidaVentaState extends State<VistaSalidaVenta> {
                   const SizedBox(height: 15),
                   
                   // --- NUEVO: SELECTOR DE UPPS ---
-                  _cargandoUpps 
-                    ? const LinearProgressIndicator() 
-                    : DropdownButtonFormField<String>(
-                        value: _uppSeleccionada,
-                        hint: const Text("Seleccionar UPP de origen"),
-                        isExpanded: true,
-                        decoration: InputDecoration(
-                          labelText: "UPP Origen (Mapa)",
-                          prefixIcon: const Icon(Icons.pin, color: Colors.grey),
-                          filled: true, fillColor: const Color(0xFFF8FAFC),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                        ),
-                        items: _uppsDisponibles.map((upp) => DropdownMenuItem(value: upp, child: Text(upp))).toList(),
-                        onChanged: (val) => setState(() => _uppSeleccionada = val),
+                  if (_cargandoUpps)
+                    const LinearProgressIndicator()
+                  else if (_uppsDisponibles.isEmpty)
+                    TextField(
+                      enabled: false,
+                      decoration: InputDecoration(
+                        labelText: "UPP Origen (Mapa)",
+                        hintText: "Sin zonas registradas en el mapa",
+                        prefixIcon: const Icon(Icons.pin, color: Colors.grey),
+                        filled: true, fillColor: Colors.red[50],
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
                       ),
-                  if (!_cargandoUpps && _uppsDisponibles.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.all(8.0),
-                      child: Text("! Registra primero tus zonas en el Mapa !", style: TextStyle(color: Colors.red, fontSize: 11, fontWeight: FontWeight.bold)),
+                    )
+                  else
+                    DropdownButtonFormField<String>(
+                      value: _uppSeleccionada,
+                      hint: const Text("Seleccionar UPP de origen"),
+                      isExpanded: true,
+                      decoration: InputDecoration(
+                        labelText: "UPP Origen (Mapa)",
+                        prefixIcon: const Icon(Icons.pin, color: Colors.grey),
+                        filled: true, fillColor: const Color(0xFFF8FAFC),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                      ),
+                      items: _uppsDisponibles.map((upp) => DropdownMenuItem(value: upp, child: Text(upp))).toList(),
+                      onChanged: (val) => setState(() => _uppSeleccionada = val),
                     ),
 
                   const SizedBox(height: 15),
@@ -306,6 +309,22 @@ class _VistaSalidaVentaState extends State<VistaSalidaVenta> {
                 label: Text(
                   _estaGuardando ? "PROCESANDO..." : "FINALIZAR VENTA", 
                   style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)
+                ),
+              ),
+            ),
+            const SizedBox(height: 15),
+            SizedBox(
+              width: double.infinity,
+              height: 55,
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  Navigator.push(context, MaterialPageRoute(builder: (context) => const VistaReporteLotes()));
+                },
+                icon: Icon(Icons.pie_chart_outline, color: verdeVenta),
+                label: Text("VER REPORTE DE LOTES", style: TextStyle(color: verdeVenta, fontWeight: FontWeight.bold, fontSize: 16)),
+                style: OutlinedButton.styleFrom(
+                  side: BorderSide(color: verdeVenta, width: 2),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
               ),
             ),

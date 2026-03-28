@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart'; // <--- AGREGADO PARA FILTRADO Y UID
 import 'id_digital.dart';
+import '../ganado/historial_individual.dart';
+import '../ganado/reporte_lotes.dart';
 
 class VistaDashboardInicio extends StatefulWidget {
   const VistaDashboardInicio({super.key});
@@ -517,6 +519,146 @@ class _VistaDashboardInicioState extends State<VistaDashboardInicio> {
     );
   }
 
+  // ==============================================================================
+  // ==============================================================================
+  // FUNCIÓN ESPECÍFICA PARA EVENTOS CRÍTICOS (Vacunas, Salud, Movilización)
+  // ==============================================================================
+  void _abrirRegistroEventoCritico() {
+    TextEditingController areteController = TextEditingController();
+    TextEditingController observacionesController = TextEditingController();
+    String tipoEvento = 'Enfermedad / Salud';
+    final List<String> tiposDisponibles = ['Enfermedad / Salud', 'Vacunación', 'Movilización', 'Otro (Especificar)'];
+    bool guardando = false;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (BuildContext sheetContext) {
+        return StatefulBuilder(
+          builder: (BuildContext modalContext, StateSetter setModalState) {
+            return Container(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(modalContext).viewInsets.bottom,
+                top: 25, left: 25, right: 25
+              ),
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.only(topLeft: Radius.circular(25), topRight: Radius.circular(25)),
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(color: Colors.redAccent.withOpacity(0.1), shape: BoxShape.circle),
+                          child: const Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 28),
+                        ),
+                        const SizedBox(width: 15),
+                        const Expanded(child: Text("Registrar Evento Crítico", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.redAccent))),
+                        IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(modalContext)),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    
+                    const Text("Tipo de Evento:", style: TextStyle(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 10),
+                    DropdownButtonFormField<String>(
+                      value: tipoEvento,
+                      decoration: InputDecoration(
+                        filled: true, fillColor: Colors.grey[100],
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                        prefixIcon: Icon(Icons.category, color: Colors.grey[400]),
+                      ),
+                      items: tiposDisponibles.map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
+                      onChanged: (val) => setModalState(() => tipoEvento = val!),
+                    ),
+                    const SizedBox(height: 15),
+
+                    const Text("Arete SINIIGA u Origen:", style: TextStyle(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: areteController,
+                      decoration: InputDecoration(
+                        hintText: "Ej. MX-12345",
+                        filled: true, fillColor: Colors.grey[100],
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                        prefixIcon: Icon(Icons.qr_code, color: Colors.grey[400]),
+                      ),
+                    ),
+                    const SizedBox(height: 15),
+
+                    const Text("Observaciones / Descripción:", style: TextStyle(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: observacionesController,
+                      maxLines: 2,
+                      decoration: InputDecoration(
+                        hintText: "Ej. Vacuna aplicada, síntoma detectado, etc.",
+                        filled: true, fillColor: Colors.grey[100],
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                        prefixIcon: Icon(Icons.edit, color: Colors.grey[400]),
+                      ),
+                    ),
+                    const SizedBox(height: 30),
+
+                    SizedBox(
+                      width: double.infinity,
+                      height: 55,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.redAccent,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        onPressed: guardando ? null : () async {
+                          if (areteController.text.trim().isEmpty || observacionesController.text.trim().isEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Por favor llena ambos campos'), backgroundColor: Colors.red));
+                            return;
+                          }
+
+                          setModalState(() { guardando = true; });
+
+                          try {
+                            final user = FirebaseAuth.instance.currentUser;
+                            await FirebaseFirestore.instance.collection('eventos_criticos').add({
+                              'usuario_id': user?.uid ?? 'anonimo',
+                              'arete_siniiga': areteController.text.trim(),
+                              'tipo_evento': tipoEvento,
+                              'descripcion': observacionesController.text.trim(),
+                              'fecha_registro': FieldValue.serverTimestamp(),
+                              'origen': 'Acceso Rápido Dashboard',
+                            });
+
+                            if (mounted) {
+                              Navigator.pop(modalContext);
+                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('¡Evento Crítico guardado!'), backgroundColor: Colors.green));
+                              _cargarDatosDeLaNube();
+                            }
+                          } catch (e) {
+                            setModalState(() { guardando = false; });
+                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
+                          }
+                        },
+                        child: guardando 
+                          ? const CircularProgressIndicator(color: Colors.white)
+                          : const Text("GUARDAR REPORTE", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                    const SizedBox(height: 25),
+                  ],
+                ),
+              )
+            );
+          }
+        );
+      }
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final Color azulAgro = const Color(0xFF01579B);
@@ -805,12 +947,16 @@ class _VistaDashboardInicioState extends State<VistaDashboardInicio> {
         children: [
           _botonRapidoMini(Icons.add_circle, "Animal", colorTema, 
             () => _abrirAccionRapida("Registrar Nuevo Animal", Icons.pets, colorTema, "ganado", "identificador_arete")),
-          _botonRapidoMini(Icons.local_hospital, "Salud", Colors.redAccent, 
-            () => _abrirAccionRapida("Reporte Veterinario", Icons.medical_services, Colors.redAccent, "reportes_salud", "descripcion_sintomas")),
+          _botonRapidoMini(Icons.local_hospital, "Salud / Evento", Colors.redAccent, 
+            () => _abrirRegistroEventoCritico()),
           _botonRapidoMini(Icons.attach_money, "Venta", Colors.green, 
             () => _abrirAccionRapida("Nueva Venta Rápida", Icons.point_of_sale, Colors.green, "ventas_salidas", "monto_total", esNumero: true)),
           _botonRapidoMini(Icons.inventory, "Insumos", Colors.orange, 
             () => _abrirAccionRapida("Solicitar Alimento", Icons.local_shipping, Colors.orange, "pedidos_inventario", "insumo_solicitado")),
+          _botonRapidoMini(Icons.history_edu, "Historial", Colors.purple, 
+            () => Navigator.push(context, MaterialPageRoute(builder: (context) => const VistaHistorialIndividual()))),
+          _botonRapidoMini(Icons.pie_chart, "Lotes", Colors.teal, 
+            () => Navigator.push(context, MaterialPageRoute(builder: (context) => const VistaReporteLotes()))),
           _botonRapidoMini(Icons.badge, "Mi ID", Colors.blueGrey, 
             () => Navigator.push(context, MaterialPageRoute(builder: (context) => const VistaIdDigital()))),
         ],
@@ -829,8 +975,8 @@ class _VistaDashboardInicioState extends State<VistaDashboardInicio> {
         ),
         WidgetAnimacionHover(
           scale: 1.1,
-          child: _botonRapido(Icons.local_hospital_outlined, "Reportar\nEnfermedad", Colors.redAccent, 
-            () => _abrirAccionRapida("Reporte Veterinario", Icons.medical_services, Colors.redAccent, "reportes_salud", "descripcion_sintomas")),
+          child: _botonRapido(Icons.warning_amber_rounded, "Registrar\nEvento Crítico", Colors.redAccent, 
+            () => _abrirRegistroEventoCritico()),
         ),
         WidgetAnimacionHover(
           scale: 1.1,
@@ -841,6 +987,16 @@ class _VistaDashboardInicioState extends State<VistaDashboardInicio> {
           scale: 1.1,
           child: _botonRapido(Icons.inventory_2_outlined, "Pedir\nInsumos", Colors.orange, 
             () => _abrirAccionRapida("Solicitar Alimento", Icons.local_shipping, Colors.orange, "pedidos_inventario", "insumo_solicitado")),
+        ),
+        WidgetAnimacionHover(
+          scale: 1.1,
+          child: _botonRapido(Icons.history_edu, "Historial\nAnimal", Colors.purple, 
+            () => Navigator.push(context, MaterialPageRoute(builder: (context) => const VistaHistorialIndividual()))),
+        ),
+        WidgetAnimacionHover(
+          scale: 1.1,
+          child: _botonRapido(Icons.pie_chart_outline, "Reporte\nLotes", Colors.teal, 
+            () => Navigator.push(context, MaterialPageRoute(builder: (context) => const VistaReporteLotes()))),
         ),
         WidgetAnimacionHover(
           scale: 1.1,

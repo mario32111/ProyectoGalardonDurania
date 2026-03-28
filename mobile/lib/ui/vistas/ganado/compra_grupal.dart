@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart'; // <--- AGREGADO PARA UID
+import 'reporte_lotes.dart';
 
 class VistaCompraGrupal extends StatefulWidget {
   const VistaCompraGrupal({super.key});
@@ -107,12 +108,7 @@ class _VistaCompraGrupalState extends State<VistaCompraGrupal> {
       return;
     }
 
-    if (_uppSeleccionada == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Debes seleccionar la UPP de destino desde el mapa'), backgroundColor: Colors.orange),
-      );
-      return;
-    }
+    String uppGuardar = _uppSeleccionada ?? 'Sin UPP asignada';
 
     setState(() {
       _estaGuardando = true; // Empieza a girar la ruedita
@@ -123,7 +119,7 @@ class _VistaCompraGrupalState extends State<VistaCompraGrupal> {
 
       await FirebaseFirestore.instance.collection('compras_lotes').add({
         'usuario_id': user?.uid ?? 'anonimo', // Asociar al usuario actual
-        'upp_destino': _uppSeleccionada, // <--- USAR UPP SELECCIONADA
+        'upp_destino': uppGuardar, // <--- USAR UPP SELECCIONADA O FALLBACK
         'proveedor': _proveedorController.text.trim(),
         'origen': _origenController.text.trim(),
         'fecha_indicada': _fechaController.text.trim().isEmpty ? 'Sin fecha' : _fechaController.text.trim(),
@@ -206,25 +202,32 @@ class _VistaCompraGrupalState extends State<VistaCompraGrupal> {
                   const SizedBox(height: 15),
                   
                   // --- NUEVO: SELECTOR DE UPPS ---
-                  _cargandoUpps 
-                    ? const LinearProgressIndicator() 
-                    : DropdownButtonFormField<String>(
-                        value: _uppSeleccionada,
-                        hint: const Text("Seleccionar UPP de destino"),
-                        isExpanded: true,
-                        decoration: InputDecoration(
-                          labelText: "UPP Destino (Mapa)",
-                          prefixIcon: const Icon(Icons.pin, color: Colors.grey),
-                          filled: true, fillColor: const Color(0xFFF8FAFC),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                        ),
-                        items: _uppsDisponibles.map((upp) => DropdownMenuItem(value: upp, child: Text(upp))).toList(),
-                        onChanged: (val) => setState(() => _uppSeleccionada = val),
+                  if (_cargandoUpps)
+                    const LinearProgressIndicator()
+                  else if (_uppsDisponibles.isEmpty)
+                    TextField(
+                      enabled: false,
+                      decoration: InputDecoration(
+                        labelText: "UPP Destino (Mapa)",
+                        hintText: "Sin zonas registradas en el mapa",
+                        prefixIcon: const Icon(Icons.pin, color: Colors.grey),
+                        filled: true, fillColor: Colors.red[50],
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
                       ),
-                  if (!_cargandoUpps && _uppsDisponibles.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.all(8.0),
-                      child: Text("! Registra primero tus zonas en el Mapa !", style: TextStyle(color: Colors.red, fontSize: 11, fontWeight: FontWeight.bold)),
+                    )
+                  else
+                    DropdownButtonFormField<String>(
+                      value: _uppSeleccionada,
+                      hint: const Text("Seleccionar UPP de destino"),
+                      isExpanded: true,
+                      decoration: InputDecoration(
+                        labelText: "UPP Destino (Mapa)",
+                        prefixIcon: const Icon(Icons.pin, color: Colors.grey),
+                        filled: true, fillColor: const Color(0xFFF8FAFC),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                      ),
+                      items: _uppsDisponibles.map((upp) => DropdownMenuItem(value: upp, child: Text(upp))).toList(),
+                      onChanged: (val) => setState(() => _uppSeleccionada = val),
                     ),
 
                   const SizedBox(height: 15),
@@ -306,6 +309,22 @@ class _VistaCompraGrupalState extends State<VistaCompraGrupal> {
                   _estaGuardando ? "GUARDANDO..." : "REGISTRAR COMPRA", 
                   style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)
                 )
+              ),
+            ),
+            const SizedBox(height: 15),
+            SizedBox(
+              width: double.infinity,
+              height: 55,
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  Navigator.push(context, MaterialPageRoute(builder: (context) => const VistaReporteLotes()));
+                },
+                icon: Icon(Icons.pie_chart_outline, color: azulAgro),
+                label: Text("VER REPORTE DE LOTES", style: TextStyle(color: azulAgro, fontWeight: FontWeight.bold, fontSize: 16)),
+                style: OutlinedButton.styleFrom(
+                  side: BorderSide(color: azulAgro, width: 2),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
               ),
             ),
             const SizedBox(height: 20),

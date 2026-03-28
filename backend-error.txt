@@ -1,0 +1,15 @@
+agro-backend  | 
+agro-backend  | > backend@0.0.0 start
+agro-backend  | > node ./bin/www
+agro-backend  | 
+agro-backend  | [dotenv@17.2.3] injecting env (0) from .env -- tip: 🔄 add secrets lifecycle management: https://dotenvx.com/ops
+agro-backend  | 🔥 Firebase initialized successfully
+agro-backend  | [dotenv@17.2.3] injecting env (0) from .env -- tip: 🔑 add access controls to secrets: https://dotenvx.com/ops
+agro-backend  | 🛠️ Creando cliente Azure OpenAI...
+agro-backend  | 🚀 Servidor HTTP corriendo en puerto 3000
+agro-backend  | 🔌 WebSocket servidor listo en ws://localhost:3000
+agro-backend  | npm error path /app
+agro-backend  | npm error command failed
+agro-backend  | npm error signal SIGTERM
+agro-backend  | npm error command sh -c node ./bin/www
+agro-backend  | npm error A complete log of this run can be found in: /root/.npm/_logs/2026-03-28T02_46_03_692Z-debug-0.log
